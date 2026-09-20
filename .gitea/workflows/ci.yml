@@ -1,0 +1,65 @@
+name: CI — Check, Build & Push
+
+on:
+  push:
+    branches: [main, dev]
+    tags: ['v*']
+  pull_request:
+    branches: [main, dev]
+
+env:
+  REGISTRY: gitea.ruk.info
+
+jobs:
+  check-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Install dependencies
+        run: uv sync
+      - name: Lint (Ruff)
+        run: uv run ruff check
+      - name: Typecheck (Mypy)
+        run: uv run mypy .
+      - name: Test (Pytest)
+        run: uv run pytest
+
+  build-and-push:
+    needs: [check-backend]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Login to Gitea Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Build and push container image
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          IMAGE_ALIAS="${{ env.REGISTRY }}/${{ github.repository }}:latest"
+          
+          docker pull "$IMAGE_ALIAS" || true
+          
+          DOCKER_BUILDKIT=1 docker build \
+            --build-arg GIT_COMMIT="$SHORT_SHA" \
+            --cache-from "$IMAGE_ALIAS" \
+            -t "$IMAGE_ALIAS" -f Dockerfile .
+            
+          pushed=false
+          for i in 1 2 3; do
+            if docker push "$IMAGE_ALIAS"; then pushed=true; break; fi
+            echo "Push attempt $i failed, retrying in 15s..."; sleep 15
+          done
+          
+          if [ "$pushed" = true ]; then 
+            echo "Pushed: $IMAGE_ALIAS"
+          else 
+            echo "ERROR: Push failed"
+            exit 1
+          fi
