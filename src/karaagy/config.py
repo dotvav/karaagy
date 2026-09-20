@@ -16,7 +16,7 @@ class KaraagySettings(BaseSettings):
     agy_bin: str | None = None
     cache_ttl_seconds: float = 3600.0
     default_model: str = "gemini-3.8-flash-high"
-    default_effort: str = "medium"
+    default_effort: str | None = None
     enable_auto_prune_sessions: bool = True
     max_retries: int = 3
     initial_backoff: float = 2.0

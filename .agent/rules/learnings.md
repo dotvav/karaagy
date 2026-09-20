@@ -25,3 +25,11 @@ def prune_conversation_storage(conversation_id: str | None) -> None:
     shutil.rmtree(brain_dir, ignore_errors=True)
     convo_file.unlink(missing_ok=True)
 ```
+
+---
+
+## 🛠️ 3. Antigravity CLI Model Suffix & `--effort` Flag Conflict
+- **Last Updated**: 2026-09-20T13:04:50Z
+- **The Issue**: When invoking `agy --model gemini-3.8-flash-high --effort medium`, the CLI exits with code 1: `error: invalid model selection: --model gemini-3.8-flash-high conflicts with --effort=medium`.
+- **The Gotcha**: Antigravity models returned by `agy models` (such as `gemini-3.8-flash-high`, `gemini-3.7-flash-low`, `gemini-3.1-pro-high`) already have reasoning effort baked into their model name suffix (`-low`, `-medium`, `-high`). Passing the `--effort` CLI parameter alongside these explicit models triggers an invalid flag collision in the CLI.
+- **Code / Solution**: Do not pass `--effort` by default; only supply `--effort` if explicitly requested by the caller AND the target model name does not already end with an effort suffix (`-low`, `-medium`, `-high`, `-thinking`).

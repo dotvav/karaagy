@@ -44,6 +44,16 @@ def prune_conversation_storage(conversation_id: str | None) -> None:
         logger.warning("Failed to prune conversation %s: %s", conversation_id, e)
 
 
+def should_pass_effort_flag(model: str, effort: str | None) -> bool:
+    """Check if --effort flag should be passed without conflicting with model name."""
+    if not effort:
+        return False
+    model_lower = model.lower()
+    if any(model_lower.endswith(f"-{s}") for s in ("low", "medium", "high", "thinking")):
+        return False
+    return True
+
+
 async def execute_agy_json(
     prompt: str,
     model: str,
@@ -68,8 +78,8 @@ async def execute_agy_json(
         model,
     ]
 
-    if effort_val:
-        cmd.extend(["--effort", effort_val])
+    if should_pass_effort_flag(model, effort_val):
+        cmd.extend(["--effort", str(effort_val)])
 
     if conversation_id:
         cmd.extend(["--conversation", conversation_id])
@@ -175,8 +185,8 @@ async def execute_agy_stream(
         model,
     ]
 
-    if effort_val:
-        cmd.extend(["--effort", effort_val])
+    if should_pass_effort_flag(model, effort_val):
+        cmd.extend(["--effort", str(effort_val)])
 
     if conversation_id:
         cmd.extend(["--conversation", conversation_id])
