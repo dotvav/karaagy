@@ -51,7 +51,7 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
             ).model_dump(),
         )
 
-    resolved_model = ModelRegistry.resolve_model(request.model)
+    base_model, effort = ModelRegistry.resolve_model_and_effort(request.model, request.effort)
     prompt_text = build_agy_prompt(request.messages)
 
     if not prompt_text:
@@ -71,8 +71,8 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
         if request.stream:
             stream_generator = execute_agy_stream(
                 prompt=prompt_text,
-                model=resolved_model,
-                effort=request.effort,
+                model=base_model,
+                effort=effort,
                 conversation_id=request.conversation_id,
             )
             return StreamingResponse(
@@ -87,8 +87,8 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
 
         response = await execute_agy_json(
             prompt=prompt_text,
-            model=resolved_model,
-            effort=request.effort,
+            model=base_model,
+            effort=effort,
             conversation_id=request.conversation_id,
         )
         return response

@@ -123,6 +123,37 @@ class ModelRegistry:
         return str(requested_model or settings.default_model)
 
     @classmethod
+    def resolve_model_and_effort(
+        cls, requested_model: str | None, requested_effort: str | None = None
+    ) -> tuple[str, str | None]:
+        """Resolve requested model name and explicit or implicit reasoning effort tier.
+
+        For example:
+        - `gemini-3.8-flash-low` -> base `gemini-3.8-flash`, effort `low`
+        - `gpt-3.5-turbo` (mapped to `gemini-3.7-flash-low`) -> base `gemini-3.7-flash`, effort `low`
+        - `gemini-3.8-flash-high` -> base `gemini-3.8-flash`, effort `high`
+        - `claude-sonnet-4-6` -> base `claude-sonnet-4-6`, effort `None` (or requested_effort)
+        """
+        raw_resolved = cls.resolve_model(requested_model)
+        effort = requested_effort
+
+        if not effort:
+            if raw_resolved.endswith("-low"):
+                effort = "low"
+            elif raw_resolved.endswith("-medium"):
+                effort = "medium"
+            elif raw_resolved.endswith("-high"):
+                effort = "high"
+
+        base_model = raw_resolved
+        for suffix in ("-low", "-medium", "-high"):
+            if base_model.endswith(suffix):
+                base_model = base_model[: -len(suffix)]
+                break
+
+        return base_model, effort
+
+    @classmethod
     async def get_model_cards(cls) -> list[ModelCard]:
         """Return list of ModelCard objects for `/v1/models` endpoint."""
         models = await cls.get_available_models()

@@ -27,3 +27,33 @@ async def test_get_model_cards() -> None:
     assert "gpt-4o" in card_ids
     assert "claude-sonnet-4-6" in card_ids
     assert all(c.object == "model" for c in cards)
+
+
+def test_resolve_model_and_effort() -> None:
+    """Test extracting base model and reasoning effort tier."""
+    # Suffix -low
+    base, effort = ModelRegistry.resolve_model_and_effort("gemini-3.8-flash-low")
+    assert base == "gemini-3.8-flash"
+    assert effort == "low"
+
+    # Alias gpt-3.5-turbo (maps to gemini-3.7-flash-low)
+    base, effort = ModelRegistry.resolve_model_and_effort("gpt-3.5-turbo")
+    assert base == "gemini-3.7-flash"
+    assert effort == "low"
+
+    # Suffix -high
+    base, effort = ModelRegistry.resolve_model_and_effort("gemini-3.8-flash-high")
+    assert base == "gemini-3.8-flash"
+    assert effort == "high"
+
+    # Explicit effort override
+    base, effort = ModelRegistry.resolve_model_and_effort(
+        "gemini-3.8-flash-high", requested_effort="low"
+    )
+    assert base == "gemini-3.8-flash"
+    assert effort == "low"
+
+    # Non-suffixed model
+    base, effort = ModelRegistry.resolve_model_and_effort("claude-sonnet-4-6")
+    assert base == "claude-sonnet-4-6"
+    assert effort is None
