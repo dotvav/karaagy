@@ -1,7 +1,7 @@
 """OpenAI-compatible request and response schemas."""
 
 import time
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -9,10 +9,10 @@ RoleType = Literal["system", "user", "assistant", "developer", "tool", "function
 
 
 class ChatCompletionMessage(BaseModel):
-    """A single chat message in a completion conversation."""
+    """A single chat message in a completion conversation (supports text and multimodal parts)."""
 
     role: str
-    content: str | None = ""
+    content: str | list[dict[str, Any]] | None = ""
     name: str | None = None
 
 

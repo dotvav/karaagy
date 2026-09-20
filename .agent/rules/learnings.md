@@ -33,3 +33,11 @@ def prune_conversation_storage(conversation_id: str | None) -> None:
 - **The Issue**: When invoking `agy --model gemini-3.8-flash-high --effort medium`, the CLI exits with code 1: `error: invalid model selection: --model gemini-3.8-flash-high conflicts with --effort=medium`.
 - **The Gotcha**: Antigravity models returned by `agy models` (such as `gemini-3.8-flash-high`, `gemini-3.7-flash-low`, `gemini-3.1-pro-high`) already have reasoning effort baked into their model name suffix (`-low`, `-medium`, `-high`). Passing the `--effort` CLI parameter alongside these explicit models triggers an invalid flag collision in the CLI.
 - **Code / Solution**: Do not pass `--effort` by default; only supply `--effort` if explicitly requested by the caller AND the target model name does not already end with an effort suffix (`-low`, `-medium`, `-high`, `-thinking`).
+
+---
+
+## 🛠️ 4. OpenAI Multimodal Structured Message Parts Support
+- **Last Updated**: 2026-09-20T13:16:00Z
+- **The Issue**: Clients sending multimodal vision requests (e.g. LiteLLM, Vibrisse) send `messages[i].content` as a list of structured dictionaries (`[{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {"url": "..."}}]`) instead of a single string. Pydantic models typed as `content: str` fail validation with HTTP `422 (Input should be a valid string)`.
+- **The Gotcha**: OpenAI standard schemas allow `content` to be either `str`, `list[dict[str, Any]]`, or `None`.
+- **Code / Solution**: Type `ChatCompletionMessage.content` as `str | list[dict[str, Any]] | None = ""` and implement an unrolling helper `extract_message_text()` that concatenates text parts and converts image URL objects into structured inline references `[Attached Image URL: <url>]`.

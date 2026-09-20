@@ -41,3 +41,22 @@ def test_build_agy_prompt_multi_turn() -> None:
 def test_build_agy_prompt_empty() -> None:
     """Test handling of empty messages list."""
     assert build_agy_prompt([]) == ""
+
+
+def test_build_agy_prompt_multimodal_list() -> None:
+    """Test handling of multimodal content parts (text and image_url)."""
+    messages = [
+        ChatCompletionMessage(
+            role="user",
+            content=[
+                {"type": "text", "text": "Check this item:"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/item.jpg"},
+                },
+            ],
+        )
+    ]
+    result = build_agy_prompt(messages)
+    assert "Check this item:" in result
+    assert "[Attached Image URL: https://example.com/item.jpg]" in result

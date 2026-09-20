@@ -70,3 +70,47 @@ def test_chat_completions_runtime_error(mock_execute: AsyncMock, client: TestCli
     data = response.json()
     assert "error" in data
     assert "binary crashed" in data["error"]["message"]
+
+
+@patch("karaagy.api.routes_chat.execute_agy_json", new_callable=AsyncMock)
+def test_chat_completions_multimodal_payload(mock_execute: AsyncMock, client: TestClient) -> None:
+    """Test handling of OpenAI multimodal vision messages payload."""
+    mock_execute.return_value = ChatCompletionResponse(
+        id="chatcmpl-multi123",
+        model="gemini-3.8-flash-high",
+        choices=[
+            ChatCompletionChoice(
+                index=0,
+                message=ChatCompletionMessage(
+                    role="assistant", content="Matched console: Switch HAC-001"
+                ),
+                finish_reason="stop",
+            )
+        ],
+        usage=UsageInfo(prompt_tokens=50, completion_tokens=10, total_tokens=60),
+    )
+
+    payload = {
+        "model": "gpt-4o",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a marketplace reconciler.",
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Reconcile this item:"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://img.leboncoin.fr/test.jpg"},
+                    },
+                ],
+            },
+        ],
+    }
+
+    response = client.post("/v1/chat/completions", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["choices"][0]["message"]["content"] == "Matched console: Switch HAC-001"
