@@ -1,0 +1,23 @@
+services:
+  karaagy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: karaagy-api
+    user: "8888:8888"
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - HOME=/home/karaagy
+      - KARAAGY_HOST=0.0.0.0
+      - KARAAGY_PORT=8000
+      - KARAAGY_DEFAULT_MODEL=gemini-3.8-flash-high
+      - KARAAGY_DEFAULT_EFFORT=medium
+      - KARAAGY_ENABLE_AUTO_PRUNE_SESSIONS=true
+    volumes:
+      - /home/karaagy/.gemini:/home/karaagy/.gemini:rw
+    labels:
+      - "com.docker.compose.project=karaagy"
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.scope=standard"

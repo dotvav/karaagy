@@ -1,11 +1,11 @@
-"""Pytest fixtures and setup."""
+"""Pytest fixtures and setup for Karaagy."""
 
 from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
 
-from src.my_project.main import app
+from karaagy.main import app
 
 
 @pytest.fixture
