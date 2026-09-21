@@ -69,8 +69,6 @@ async def execute_agy_json(
 
     cmd = [
         agy_bin,
-        "--prompt",
-        prompt,
         "--output-format",
         "json",
         "--dangerously-skip-permissions",
@@ -95,11 +93,12 @@ async def execute_agy_json(
             )
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=working_dir,
             )
-            stdout, stderr = await proc.communicate()
+            stdout, stderr = await proc.communicate(input=prompt.encode("utf-8"))
             raw_stdout = stdout.decode("utf-8", errors="replace").strip()
             raw_stderr = stderr.decode("utf-8", errors="replace").strip()
 
@@ -176,8 +175,6 @@ async def execute_agy_stream(
 
     cmd = [
         agy_bin,
-        "--prompt",
-        prompt,
         "--output-format",
         "stream-json",
         "--dangerously-skip-permissions",
@@ -194,10 +191,16 @@ async def execute_agy_stream(
     logger.info("Running AGY streaming (model=%s)", model)
     proc = await asyncio.create_subprocess_exec(
         *cmd,
+        stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=working_dir,
     )
+
+    if proc.stdin is not None:
+        proc.stdin.write(prompt.encode("utf-8"))
+        await proc.stdin.drain()
+        proc.stdin.close()
 
     if proc.stdout is None:
         raise RuntimeError("Subprocess stdout stream is unavailable")

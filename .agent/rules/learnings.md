@@ -41,3 +41,11 @@ def prune_conversation_storage(conversation_id: str | None) -> None:
 - **The Issue**: Clients sending multimodal vision requests (e.g. LiteLLM, Vibrisse) send `messages[i].content` as a list of structured dictionaries (`[{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {"url": "..."}}]`) instead of a single string. Pydantic models typed as `content: str` fail validation with HTTP `422 (Input should be a valid string)`.
 - **The Gotcha**: OpenAI standard schemas allow `content` to be either `str`, `list[dict[str, Any]]`, or `None`.
 - **Code / Solution**: Type `ChatCompletionMessage.content` as `str | list[dict[str, Any]] | None = ""` and implement an unrolling helper `extract_message_text()` that concatenates text parts and converts image URL objects into structured inline references `[Attached Image URL: <url>]`.
+
+---
+
+## 🛠️ 5. Subprocess Prompt Piping via `stdin` to Prevent Linux `ARG_MAX` Limit
+- **Last Updated**: 2026-09-21T07:04:00Z
+- **The Issue**: When clients pass large payloads (large marketplace item catalogs, lengthy instructions, base64 data), passing `--prompt "<text>"` on the command-line arguments exceeds the Linux kernel `MAX_ARG_STRLEN` (128 KB per argument), crashing with `OSError: [Errno 7] Argument list too long`.
+- **The Gotcha**: Subprocess command argument arrays in POSIX systems have strict size bounds per argument.
+- **Code / Solution**: Do not pass `--prompt` in CLI `args`. Instead, omit `--prompt` and stream the prompt bytes directly via standard input `stdin=asyncio.subprocess.PIPE` using `proc.communicate(input=prompt.encode("utf-8"))` for JSON mode, or `proc.stdin.write(prompt.encode("utf-8"))` for streaming mode.
