@@ -12,6 +12,13 @@ def test_is_retryable_agy_error() -> None:
     assert is_retryable_agy_error("Model is overloaded, please retry later") is True
     assert is_retryable_agy_error("TLS handshake error") is True
     assert is_retryable_agy_error("broken pipe") is True
+    assert (
+        is_retryable_agy_error(
+            "the connection to the agent was interrupted before the response finished: subscriber fell behind updates, stalled for 5s"
+        )
+        is True
+    )
+    assert is_retryable_agy_error("channel closed") is True
     assert is_retryable_agy_error("invalid argument: unrecognized flag") is False
     assert is_retryable_agy_error("") is False
 

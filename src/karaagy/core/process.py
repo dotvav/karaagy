@@ -9,6 +9,7 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from karaagy.config import settings
+from karaagy.core.prompt import cleanup_temp_images
 from karaagy.core.sanitization import is_retryable_agy_error, sanitize_agy_response
 from karaagy.models.agy import AGYJsonResponse, AGYStreamEvent
 from karaagy.models.openai import (
@@ -44,6 +45,19 @@ def prune_conversation_storage(conversation_id: str | None) -> None:
         logger.warning("Failed to prune conversation %s: %s", conversation_id, e)
 
 
+_concurrency_semaphore: asyncio.Semaphore | None = None
+
+
+def get_concurrency_semaphore() -> asyncio.Semaphore | None:
+    """Lazily initialize and return the global concurrency semaphore."""
+    global _concurrency_semaphore
+    if settings.max_concurrent_sessions <= 0:
+        return None
+    if _concurrency_semaphore is None:
+        _concurrency_semaphore = asyncio.Semaphore(settings.max_concurrent_sessions)
+    return _concurrency_semaphore
+
+
 def should_pass_effort_flag(model: str, effort: str | None) -> bool:
     """Check if --effort flag should be passed without conflicting with model name."""
     if not effort:
@@ -54,7 +68,7 @@ def should_pass_effort_flag(model: str, effort: str | None) -> bool:
     return True
 
 
-async def execute_agy_json(
+async def _execute_agy_json_internal(
     prompt: str,
     model: str,
     effort: str | None = None,
@@ -121,7 +135,35 @@ async def execute_agy_json(
             except Exception:
                 parsed = AGYJsonResponse(response=raw_stdout)
 
+            if parsed.status == "ERROR" or parsed.error:
+                err_msg = parsed.error or f"AGY returned status {parsed.status}"
+                last_error = err_msg
+                logger.warning(
+                    "AGY non-streaming returned error status: %s (attempt %d/%d)",
+                    err_msg,
+                    attempt,
+                    settings.max_retries,
+                )
+                if attempt < settings.max_retries and is_retryable_agy_error(err_msg):
+                    backoff = settings.initial_backoff * (2 ** (attempt - 1))
+                    await asyncio.sleep(backoff)
+                    continue
+                raise RuntimeError(f"AGY CLI error: {err_msg}")
+
             clean_text = sanitize_agy_response(parsed.response)
+            if not clean_text:
+                last_error = "AGY returned empty text response"
+                logger.warning(
+                    "AGY returned empty text response (attempt %d/%d)",
+                    attempt,
+                    settings.max_retries,
+                )
+                if attempt < settings.max_retries:
+                    backoff = settings.initial_backoff * (2 ** (attempt - 1))
+                    await asyncio.sleep(backoff)
+                    continue
+                raise RuntimeError("AGY returned empty response content.")
+
             usage = UsageInfo()
             if parsed.usage:
                 usage = UsageInfo(
@@ -160,12 +202,40 @@ async def execute_agy_json(
     )
 
 
-async def execute_agy_stream(
+async def execute_agy_json(
     prompt: str,
     model: str,
     effort: str | None = None,
     conversation_id: str | None = None,
     cwd: Path | None = None,
+) -> ChatCompletionResponse:
+    """Execute non-streaming completion guarded by concurrency semaphore."""
+    sem = get_concurrency_semaphore()
+    if sem is not None:
+        async with sem:
+            return await _execute_agy_json_internal(
+                prompt=prompt,
+                model=model,
+                effort=effort,
+                conversation_id=conversation_id,
+                cwd=cwd,
+            )
+    return await _execute_agy_json_internal(
+        prompt=prompt,
+        model=model,
+        effort=effort,
+        conversation_id=conversation_id,
+        cwd=cwd,
+    )
+
+
+async def _execute_agy_stream_internal(
+    prompt: str,
+    model: str,
+    effort: str | None = None,
+    conversation_id: str | None = None,
+    cwd: Path | None = None,
+    temp_files: list[Path] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Execute streaming completion via `agy --output-format stream-json` and yield SSE events."""
     agy_bin = settings.resolve_agy_bin()
@@ -189,104 +259,141 @@ async def execute_agy_stream(
         cmd.extend(["--conversation", conversation_id])
 
     logger.info("Running AGY streaming (model=%s)", model)
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=working_dir,
-    )
-
-    if proc.stdin is not None:
-        proc.stdin.write(prompt.encode("utf-8"))
-        await proc.stdin.drain()
-        proc.stdin.close()
-
-    if proc.stdout is None:
-        raise RuntimeError("Subprocess stdout stream is unavailable")
-
-    # Initial role chunk
-    initial_chunk = ChatCompletionChunk(
-        id=completion_id,
-        model=model,
-        choices=[
-            ChatCompletionChunkChoice(
-                index=0,
-                delta=ChatCompletionChunkDelta(role="assistant"),
-                finish_reason=None,
-            )
-        ],
-    )
-    yield f"data: {initial_chunk.model_dump_json(exclude_none=True)}\n\n"
-
     discovered_convo_id: str | None = conversation_id
 
-    while True:
-        line = await proc.stdout.readline()
-        if not line:
-            break
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=working_dir,
+        )
 
-        line_str = line.decode("utf-8", errors="replace").strip()
-        if not line_str:
-            continue
+        if proc.stdin is not None:
+            proc.stdin.write(prompt.encode("utf-8"))
+            await proc.stdin.drain()
+            proc.stdin.close()
 
-        try:
-            event_data = json.loads(line_str)
-            stream_event = AGYStreamEvent.model_validate(event_data)
+        if proc.stdout is None:
+            raise RuntimeError("Subprocess stdout stream is unavailable")
 
-            if stream_event.conversation_id:
-                discovered_convo_id = stream_event.conversation_id
+        # Initial role chunk
+        initial_chunk = ChatCompletionChunk(
+            id=completion_id,
+            model=model,
+            choices=[
+                ChatCompletionChunkChoice(
+                    index=0,
+                    delta=ChatCompletionChunkDelta(role="assistant"),
+                    finish_reason=None,
+                )
+            ],
+        )
+        yield f"data: {initial_chunk.model_dump_json(exclude_none=True)}\n\n"
 
-            if stream_event.event == "step_update" and stream_event.step_update:
-                delta_text = stream_event.step_update.text_delta
-                if delta_text:
-                    clean_delta = (
-                        sanitize_agy_response(delta_text)
-                        if "**Notification" in delta_text
-                        else delta_text
-                    )
-                    chunk = ChatCompletionChunk(
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+
+            line_str = line.decode("utf-8", errors="replace").strip()
+            if not line_str:
+                continue
+
+            try:
+                event_data = json.loads(line_str)
+                stream_event = AGYStreamEvent.model_validate(event_data)
+
+                if stream_event.conversation_id:
+                    discovered_convo_id = stream_event.conversation_id
+
+                if stream_event.event == "step_update" and stream_event.step_update:
+                    delta_text = stream_event.step_update.text_delta
+                    if delta_text:
+                        clean_delta = (
+                            sanitize_agy_response(delta_text)
+                            if "**Notification" in delta_text
+                            else delta_text
+                        )
+                        chunk = ChatCompletionChunk(
+                            id=completion_id,
+                            model=model,
+                            choices=[
+                                ChatCompletionChunkChoice(
+                                    index=0,
+                                    delta=ChatCompletionChunkDelta(content=clean_delta),
+                                    finish_reason=None,
+                                )
+                            ],
+                        )
+                        yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+
+                elif stream_event.event == "result" and stream_event.result:
+                    usage = UsageInfo()
+                    if stream_event.result.usage:
+                        usage = UsageInfo(
+                            prompt_tokens=stream_event.result.usage.input_tokens,
+                            completion_tokens=stream_event.result.usage.output_tokens,
+                            total_tokens=stream_event.result.usage.total_tokens,
+                        )
+                    final_chunk = ChatCompletionChunk(
                         id=completion_id,
                         model=model,
                         choices=[
                             ChatCompletionChunkChoice(
                                 index=0,
-                                delta=ChatCompletionChunkDelta(content=clean_delta),
-                                finish_reason=None,
+                                delta=ChatCompletionChunkDelta(),
+                                finish_reason="stop",
                             )
                         ],
+                        usage=usage,
                     )
-                    yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                    yield f"data: {final_chunk.model_dump_json(exclude_none=True)}\n\n"
 
-            elif stream_event.event == "result" and stream_event.result:
-                usage = UsageInfo()
-                if stream_event.result.usage:
-                    usage = UsageInfo(
-                        prompt_tokens=stream_event.result.usage.input_tokens,
-                        completion_tokens=stream_event.result.usage.output_tokens,
-                        total_tokens=stream_event.result.usage.total_tokens,
-                    )
-                final_chunk = ChatCompletionChunk(
-                    id=completion_id,
-                    model=model,
-                    choices=[
-                        ChatCompletionChunkChoice(
-                            index=0,
-                            delta=ChatCompletionChunkDelta(),
-                            finish_reason="stop",
-                        )
-                    ],
-                    usage=usage,
-                )
-                yield f"data: {final_chunk.model_dump_json(exclude_none=True)}\n\n"
+            except Exception as e:
+                logger.debug("Non-critical error parsing stream event line: %s", e)
 
-        except Exception as e:
-            logger.debug("Non-critical error parsing stream event line: %s", e)
+        await proc.wait()
 
-    await proc.wait()
-
-    # Ephemeral storage pruning
-    if not conversation_id and discovered_convo_id:
-        prune_conversation_storage(discovered_convo_id)
+    finally:
+        # Ephemeral storage and temp images pruning
+        if not conversation_id and discovered_convo_id:
+            prune_conversation_storage(discovered_convo_id)
+        if temp_files:
+            cleanup_temp_images(temp_files)
 
     yield "data: [DONE]\n\n"
+
+
+async def execute_agy_stream(
+    prompt: str,
+    model: str,
+    effort: str | None = None,
+    conversation_id: str | None = None,
+    cwd: Path | None = None,
+    temp_files: list[Path] | None = None,
+) -> AsyncGenerator[str, None]:
+    """Execute streaming completion guarded by concurrency semaphore."""
+    sem = get_concurrency_semaphore()
+    if sem is not None:
+        async with sem:
+            async for chunk in _execute_agy_stream_internal(
+                prompt=prompt,
+                model=model,
+                effort=effort,
+                conversation_id=conversation_id,
+                cwd=cwd,
+                temp_files=temp_files,
+            ):
+                yield chunk
+    else:
+        async for chunk in _execute_agy_stream_internal(
+            prompt=prompt,
+            model=model,
+            effort=effort,
+            conversation_id=conversation_id,
+            cwd=cwd,
+            temp_files=temp_files,
+        ):
+            yield chunk

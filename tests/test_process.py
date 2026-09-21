@@ -46,3 +46,19 @@ async def test_execute_agy_json_mocked_proc() -> None:
         assert result.choices[0].message.content == "Paris"
         assert result.usage is not None
         assert result.usage.total_tokens == 12
+
+
+def test_concurrency_semaphore_config() -> None:
+    """Test get_concurrency_semaphore behavior with configured limit."""
+    from karaagy.core.process import get_concurrency_semaphore
+
+    with patch("karaagy.core.process.settings.max_concurrent_sessions", 4):
+        with patch("karaagy.core.process._concurrency_semaphore", None):
+            sem = get_concurrency_semaphore()
+            assert sem is not None
+            assert sem._value == 4
+
+    with patch("karaagy.core.process.settings.max_concurrent_sessions", 0):
+        with patch("karaagy.core.process._concurrency_semaphore", None):
+            sem_unbounded = get_concurrency_semaphore()
+            assert sem_unbounded is None

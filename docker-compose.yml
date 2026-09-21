@@ -15,6 +15,7 @@ services:
       - KARAAGY_DEFAULT_MODEL=gemini-3.8-flash-high
       - KARAAGY_DEFAULT_EFFORT=medium
       - KARAAGY_ENABLE_AUTO_PRUNE_SESSIONS=true
+      - KARAAGY_MAX_CONCURRENT_SESSIONS=4
     volumes:
       - /home/karaagy/.gemini:/home/karaagy/.gemini:rw
     labels:

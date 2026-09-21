@@ -1,13 +1,14 @@
 """OpenAI Chat Completions endpoint supporting sync and SSE streaming."""
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from karaagy.core.process import execute_agy_json, execute_agy_stream
-from karaagy.core.prompt import build_agy_prompt
+from karaagy.core.prompt import build_agy_prompt, cleanup_temp_images
 from karaagy.core.registry import ModelRegistry
 from karaagy.models.openai import (
     ChatCompletionRequest,
@@ -52,9 +53,11 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
         )
 
     base_model, effort = ModelRegistry.resolve_model_and_effort(request.model, request.effort)
-    prompt_text = build_agy_prompt(request.messages)
+    tracked_images: list[Path] = []
+    prompt_text = build_agy_prompt(request.messages, tracked_files=tracked_images)
 
     if not prompt_text:
+        cleanup_temp_images(tracked_images)
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content=ErrorResponse(
@@ -74,6 +77,7 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
                 model=base_model,
                 effort=effort,
                 conversation_id=request.conversation_id,
+                temp_files=tracked_images,
             )
             return StreamingResponse(
                 stream_generator,
@@ -117,3 +121,6 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
                 )
             ).model_dump(),
         )
+    finally:
+        if not request.stream:
+            cleanup_temp_images(tracked_images)

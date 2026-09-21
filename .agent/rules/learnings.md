@@ -49,3 +49,22 @@ def prune_conversation_storage(conversation_id: str | None) -> None:
 - **The Issue**: When clients pass large payloads (large marketplace item catalogs, lengthy instructions, base64 data), passing `--prompt "<text>"` on the command-line arguments exceeds the Linux kernel `MAX_ARG_STRLEN` (128 KB per argument), crashing with `OSError: [Errno 7] Argument list too long`.
 - **The Gotcha**: Subprocess command argument arrays in POSIX systems have strict size bounds per argument.
 - **Code / Solution**: Do not pass `--prompt` in CLI `args`. Instead, omit `--prompt` and stream the prompt bytes directly via standard input `stdin=asyncio.subprocess.PIPE` using `proc.communicate(input=prompt.encode("utf-8"))` for JSON mode, or `proc.stdin.write(prompt.encode("utf-8"))` for streaming mode.
+
+---
+
+## 🛠️ 6. Antigravity CLI Transient Subscriber Lag Handling and Base64 Media Offloading
+- **Last Updated**: 2026-09-21T07:37:30Z
+- **The Issue**: When concurrent requests or large multimodal payloads hit the gateway, the Antigravity CLI subprocess occasionally fails with `the connection to the agent was interrupted before the response finished: subscriber fell behind updates, stalled for 5s` or returns an empty response payload (`{"status": "ERROR", "response": ""}`). Without specific pattern matching and retry loops on error payloads/empty responses, the gateway returns HTTP 500 or empty content, causing client fallback errors.
+- **The Gotcha**: If base64 data URIs are piped directly as plaintext in stdin, the massive text strings can trigger buffer delays. Furthermore, `subscriber fell behind updates` and status `ERROR` payloads must be classified as retryable.
+- **Code / Solution**:
+  1. Add `subscriber fell behind`, `stalled for`, `interrupted`, and `channel closed` to `RETRYABLE_AGY_ERROR_PATTERNS`.
+  2. In `execute_agy_json`, trigger exponential backoff retries if `parsed.status == "ERROR"`, `parsed.error` is present, or `clean_text` is empty.
+  3. Extract base64 image data URIs to temporary image files (`[Attached Image File: /tmp/karaagy_images/img_xxx.jpg]`) rather than sending megabytes of raw base64 string text over stdin.
+
+---
+
+## 🛠️ 7. Process Concurrency Semaphore Guard
+- **Last Updated**: 2026-09-21T07:45:00Z
+- **The Issue**: Unbounded concurrent requests trigger numerous concurrent `agy` subprocesses, causing high memory usage, token lock contention, and gRPC subscriber drops.
+- **The Gotcha**: Completely serializing executions (limit = 1) slows down multi-item batch screening in downstream clients.
+- **Code / Solution**: Use an asynchronous semaphore `asyncio.Semaphore(settings.max_concurrent_sessions)` (defaulting to 4, configurable via `KARAAGY_MAX_CONCURRENT_SESSIONS` or `0` for unbounded) around `execute_agy_json` and `execute_agy_stream`. Excess requests queue in memory at FastAPI level and execute smoothly as slots free up.

@@ -9,9 +9,12 @@ RETRYABLE_AGY_ERROR_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"connection reset", re.IGNORECASE),
     re.compile(r"broken pipe", re.IGNORECASE),
     re.compile(r"timeout", re.IGNORECASE),
+    re.compile(r"timed out", re.IGNORECASE),
     re.compile(r"deadline exceeded", re.IGNORECASE),
     re.compile(r"temporary failure in name resolution", re.IGNORECASE),
     re.compile(r"rate limit", re.IGNORECASE),
+    re.compile(r"resource exhausted", re.IGNORECASE),
+    re.compile(r"quota", re.IGNORECASE),
     re.compile(r"429", re.IGNORECASE),
     re.compile(r"500", re.IGNORECASE),
     re.compile(r"502", re.IGNORECASE),
@@ -20,6 +23,14 @@ RETRYABLE_AGY_ERROR_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"overloaded", re.IGNORECASE),
     re.compile(r"TLS handshake", re.IGNORECASE),
     re.compile(r"oauth", re.IGNORECASE),
+    re.compile(r"token expired", re.IGNORECASE),
+    re.compile(r"subscriber fell behind", re.IGNORECASE),
+    re.compile(r"stalled for", re.IGNORECASE),
+    re.compile(r"interrupted", re.IGNORECASE),
+    re.compile(r"channel closed", re.IGNORECASE),
+    re.compile(r"stream closed", re.IGNORECASE),
+    re.compile(r"transport is closing", re.IGNORECASE),
+    re.compile(r"empty response", re.IGNORECASE),
 ]
 
 

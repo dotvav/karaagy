@@ -20,6 +20,7 @@ class KaraagySettings(BaseSettings):
     enable_auto_prune_sessions: bool = True
     max_retries: int = 3
     initial_backoff: float = 2.0
+    max_concurrent_sessions: int = 4
     antigravity_home: Path = Path.home() / ".gemini" / "antigravity-cli"
 
     model_config = SettingsConfigDict(

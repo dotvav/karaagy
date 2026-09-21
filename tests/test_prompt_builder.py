@@ -60,3 +60,35 @@ def test_build_agy_prompt_multimodal_list() -> None:
     result = build_agy_prompt(messages)
     assert "Check this item:" in result
     assert "[Attached Image URL: https://example.com/item.jpg]" in result
+
+
+def test_build_agy_prompt_base64_image() -> None:
+    """Test handling of base64 data URIs saved as local image files and cleanup."""
+    from pathlib import Path
+
+    from karaagy.core.prompt import cleanup_temp_images
+
+    dummy_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    messages = [
+        ChatCompletionMessage(
+            role="user",
+            content=[
+                {"type": "text", "text": "Inspect image:"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{dummy_png}"},
+                },
+            ],
+        )
+    ]
+    tracked: list[Path] = []
+    result = build_agy_prompt(messages, tracked_files=tracked)
+    assert "Inspect image:" in result
+    assert "[Attached Image File:" in result
+    assert ".png]" in result
+    assert len(tracked) == 1
+    assert tracked[0].exists()
+
+    # Test cleanup
+    cleanup_temp_images(tracked)
+    assert not tracked[0].exists()

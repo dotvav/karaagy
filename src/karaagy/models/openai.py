@@ -19,6 +19,8 @@ class ChatCompletionMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     """OpenAI chat completion request schema with Antigravity extensions."""
 
+    model_config = {"extra": "allow"}
+
     model: str
     messages: list[ChatCompletionMessage]
     stream: bool = False
@@ -30,6 +32,7 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
     user: str | None = None
+    response_format: dict[str, Any] | None = None
 
     # Antigravity extensions
     effort: Literal["low", "medium", "high"] | None = None
