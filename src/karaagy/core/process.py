@@ -337,6 +337,13 @@ async def _execute_agy_stream_internal(
                             completion_tokens=stream_event.result.usage.output_tokens,
                             total_tokens=stream_event.result.usage.total_tokens,
                         )
+                        from karaagy.core.diagnostics import DiagnosticsManager
+
+                        DiagnosticsManager.record_request_completion(
+                            success=True,
+                            prompt_tokens=stream_event.result.usage.input_tokens,
+                            completion_tokens=stream_event.result.usage.output_tokens,
+                        )
                     final_chunk = ChatCompletionChunk(
                         id=completion_id,
                         model=model,

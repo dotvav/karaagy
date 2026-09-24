@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from karaagy.core.diagnostics import DiagnosticsManager
 from karaagy.core.process import execute_agy_json, execute_agy_stream
 from karaagy.core.prompt import build_agy_prompt, cleanup_temp_images
 from karaagy.core.registry import ModelRegistry
@@ -95,9 +96,15 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
             effort=effort,
             conversation_id=request.conversation_id,
         )
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+        DiagnosticsManager.record_request_completion(
+            success=True, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens
+        )
         return response
 
     except RuntimeError as e:
+        DiagnosticsManager.record_request_completion(success=False)
         logger.error("Chat completion runtime error: %s", e)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -110,6 +117,7 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
             ).model_dump(),
         )
     except Exception as e:
+        DiagnosticsManager.record_request_completion(success=False)
         logger.exception("Unexpected error in chat completions: %s", e)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

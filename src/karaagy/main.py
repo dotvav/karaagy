@@ -23,8 +23,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager to warm up caches and log startup info."""
     logger.info("Starting %s on %s:%d", settings.app_name, settings.host, settings.port)
-    # Warm up model registry cache in background
+    # Warm up model registry and quota caches in background
     asyncio.create_task(ModelRegistry.get_available_models())
+    from karaagy.core.diagnostics import DiagnosticsManager
+
+    asyncio.create_task(DiagnosticsManager.get_account_quota())
     yield
     logger.info("Shutting down %s", settings.app_name)
 
@@ -47,13 +50,3 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
-
-
-@app.get("/")
-async def root() -> dict[str, str]:
-    """Root endpoint returning basic service information."""
-    return {
-        "service": settings.app_name,
-        "status": "online",
-        "endpoints": "/v1/models, /v1/chat/completions, /healthz",
-    }

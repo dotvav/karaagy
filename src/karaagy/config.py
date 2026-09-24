@@ -15,6 +15,8 @@ class KaraagySettings(BaseSettings):
     port: int = 8000
     agy_bin: str | None = None
     cache_ttl_seconds: float = 3600.0
+    usage_cache_ttl_seconds: float = 600.0
+    public_base_url: str | None = None
     default_model: str = "gemini-3.8-flash-high"
     default_effort: str | None = None
     enable_auto_prune_sessions: bool = True

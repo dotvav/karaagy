@@ -68,3 +68,11 @@ def prune_conversation_storage(conversation_id: str | None) -> None:
 - **The Issue**: Unbounded concurrent requests trigger numerous concurrent `agy` subprocesses, causing high memory usage, token lock contention, and gRPC subscriber drops.
 - **The Gotcha**: Completely serializing executions (limit = 1) slows down multi-item batch screening in downstream clients.
 - **Code / Solution**: Use an asynchronous semaphore `asyncio.Semaphore(settings.max_concurrent_sessions)` (defaulting to 4, configurable via `KARAAGY_MAX_CONCURRENT_SESSIONS` or `0` for unbounded) around `execute_agy_json` and `execute_agy_stream`. Excess requests queue in memory at FastAPI level and execute smoothly as slots free up.
+
+---
+
+## 🛠️ 8. Dynamic Status Page with Antigravity `/usage` Quota Caching & Content Negotiation
+- **Last Updated**: 2026-09-24T15:37:30Z
+- **The Issue**: Serving an interactive status page on `GET /` that calls `agy -p "/usage"` on every request adds 3-4s latency per page view. Furthermore, automated API clients require JSON output while browsers require HTML.
+- **The Gotcha**: `agy -p "/usage" --output-format json` queries Google's backend and must not be run synchronously on every HTTP request. Content negotiation should check for `text/html` explicitly in `Accept` headers so curl and testing tools receive clean JSON while browsers receive the dashboard.
+- **Code / Solution**: Cache `/usage` quota data via `DiagnosticsManager` with a 10-minute TTL and warm it up during FastAPI startup lifespan. Return a self-contained, air-gap-safe HTML dashboard when `text/html` is in `Accept` headers, and structured JSON otherwise. Mask sensitive environment variables containing `TOKEN`, `KEY`, `SECRET`, `AUTH`, and `PASS`.
