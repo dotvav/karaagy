@@ -62,8 +62,6 @@ uv run uvicorn karaagy.main:app --reload --port 8000
 ### `docker-compose.yml` Specification
 
 ```yaml
-version: "3.8"
-
 services:
   karaagy:
     image: ghcr.io/roukine/karaagy:latest
