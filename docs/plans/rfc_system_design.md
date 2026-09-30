@@ -49,31 +49,31 @@
 
 ```mermaid
 flowchart TD
-    subgraph Client Layer
-        SDK[OpenAI Client / LangChain / Open WebUI]
+    subgraph Client_Layer ["Client Layer"]
+        SDK["OpenAI Client / LangChain / Open WebUI"]
     end
 
-    subgraph Karaagy Service (FastAPI)
-        AUTH[Auth Middleware / Bearer Token Check]
-        ROUTER[FastAPI APIRouter]
+    subgraph Karaagy_Service ["Karaagy Service (FastAPI)"]
+        AUTH["Auth Middleware / Bearer Token Check"]
+        ROUTER["FastAPI APIRouter"]
         
-        subgraph Endpoints
+        subgraph Endpoints ["Endpoints"]
             MODELS_EP["GET /v1/models"]
             CHAT_EP["POST /v1/chat/completions"]
             HEALTH_EP["GET /healthz & /v1/health"]
         end
 
-        subgraph Core Engine
-            REGISTRY[Model Registry & Tier Router]
-            PROMPT_BLDR[Prompt & Message Formatter]
-            PROC_MGR[Async Subprocess Manager]
-            SANITIZER[Response Sanitizer & Error Classifier]
-            STREAMER[SSE Token Streamer]
+        subgraph Core_Engine ["Core Engine"]
+            REGISTRY["Model Registry & Tier Router"]
+            PROMPT_BLDR["Prompt & Message Formatter"]
+            PROC_MGR["Async Subprocess Manager"]
+            SANITIZER["Response Sanitizer & Error Classifier"]
+            STREAMER["SSE Token Streamer"]
         end
     end
 
-    subgraph Subsystem
-        AGY_CLI[Antigravity CLI: agy]
+    subgraph Subsystem ["Subsystem"]
+        AGY_CLI["Antigravity CLI (agy)"]
     end
 
     SDK <-->|HTTP / Bearer Token| AUTH
@@ -82,17 +82,17 @@ flowchart TD
     ROUTER --> CHAT_EP
     ROUTER --> HEALTH_EP
 
-    MODELS_EP <-->|Query & TTL Cache| REGISTRY
-    REGISTRY <-->|`agy models`| AGY_CLI
+    MODELS_EP <-->|"Query & TTL Cache"| REGISTRY
+    REGISTRY <-->|"agy models"| AGY_CLI
 
     CHAT_EP --> PROMPT_BLDR
     PROMPT_BLDR --> PROC_MGR
-    PROC_MGR -->|`agy --prompt ... --output-format stream-json`| AGY_CLI
+    PROC_MGR -->|"agy stream-json"| AGY_CLI
     
-    AGY_CLI -->|NDJSON stdout| PROC_MGR
+    AGY_CLI -->|"NDJSON stdout"| PROC_MGR
     PROC_MGR --> SANITIZER
     SANITIZER --> STREAMER
-    STREAMER -->|SSE Chunks / JSON Response| SDK
+    STREAMER -->|"SSE Chunks / JSON Response"| SDK
 ```
 
 ---
