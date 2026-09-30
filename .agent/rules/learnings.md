@@ -76,3 +76,45 @@ def prune_conversation_storage(conversation_id: str | None) -> None:
 - **The Issue**: Serving an interactive status page on `GET /` that calls `agy -p "/usage"` on every request adds 3-4s latency per page view. Furthermore, automated API clients require JSON output while browsers require HTML.
 - **The Gotcha**: `agy -p "/usage" --output-format json` queries Google's backend and must not be run synchronously on every HTTP request. Content negotiation should check for `text/html` explicitly in `Accept` headers so curl and testing tools receive clean JSON while browsers receive the dashboard.
 - **Code / Solution**: Cache `/usage` quota data via `DiagnosticsManager` with a 10-minute TTL and warm it up during FastAPI startup lifespan. Return a self-contained, air-gap-safe HTML dashboard when `text/html` is in `Accept` headers, and structured JSON otherwise. Mask sensitive environment variables containing `TOKEN`, `KEY`, `SECRET`, `AUTH`, and `PASS`.
+
+---
+
+## 🛠️ 9. Gitea Issue Asset Attachment API & Pure Vector Transparent SVGs
+- **Last Updated**: 2026-09-30T07:08:20Z
+- **The Issue**: Uploading vector design assets directly to Gitea issues programmatically requires finding the correct API endpoint and ensuring inline rendering in markdown comments, while SVGs designed for both light and dark mode web UI must avoid hardcoded background rectangles.
+- **The Gotcha**: Hardcoded `<rect width="100%" height="100%" fill="#..."/>` prevents SVGs from blending into transparent web headers and dark/light themes. Additionally, Gitea issue asset attachments are managed via `POST /api/v1/repos/{owner}/{repo}/issues/{id}/assets` using `multipart/form-data; name=attachment` with the standard API token header.
+- **Code / Solution**:
+  1. For vector SVG assets, define a tight `viewBox` (e.g. `0 0 512 512`) without any root `<rect>` canvas, using dual neon accents (`#06b6d4` cyan, `#a855f7` violet) and warm golden amber tones (`#f59e0b`, `#fbbf24`, `#d97706`) with dark amber outlines (`#78350f`) so all elements maintain high contrast against pure white (`#ffffff`) and dark slate (`#0d1117`) backgrounds.
+  2. Upload assets via Gitea API:
+  ```bash
+  curl -s -X POST "https://gitea.example.com/api/v1/repos/owner/repo/issues/1/assets" \
+    -H "Authorization: token <token>" \
+    -H "Accept: application/json" \
+    -F "attachment=@assets/logo.svg;type=image/svg+xml"
+  ```
+
+---
+
+## 🛠️ 10. Raster-to-Vector Pipeline: `rembg` Model Sizing & `vtracer` Spline Fitting
+- **Last Updated**: 2026-09-30T07:16:30Z
+- **The Issue**: Converting AI-generated concept art (diffusion bitmaps) into vector SVGs cannot be done by LLM text generation alone. Using `rembg` out-of-the-box defaults to `bria-rmbg-2.0` (1.02 GB model) which causes OOM process kills (exit code 137) on standard dev runners.
+- **The Gotcha**: `rembg.new_session("u2netp")` loads a lightweight 4.5 MB U2-Net model that executes in <2s with negligible RAM footprint, isolating the subject cleanly. Then `vtracer` with `colormode="color"`, `hierarchical="stacked"`, `filter_speckle=6`, and `color_precision=6` produces crisp, scalable Bézier multi-layer vector paths.
+- **Code / Solution**:
+```python
+from rembg import new_session, remove
+import vtracer
+
+session = new_session("u2netp")
+nobg_bytes = remove(input_bytes, session=session)
+vtracer.convert_image_to_svg_py(
+    image_path=str(nobg_path),
+    out_path=str(svg_path),
+    colormode="color",
+    hierarchical="stacked",
+    filter_speckle=6,
+    color_precision=6,
+    layer_difference=16,
+)
+```
+
+

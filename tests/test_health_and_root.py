@@ -47,7 +47,7 @@ def test_refresh_usage_endpoint(client: TestClient) -> None:
 
 
 def test_sanitized_environment_masking() -> None:
-    """Test sensitive secrets are redacted in environment diagnostics."""
+    """Test sensitive secrets are fully redacted without leading chars and safe keys remain unmasked."""
     import os
     from unittest.mock import patch
 
@@ -59,14 +59,18 @@ def test_sanitized_environment_masking() -> None:
         "DATABASE_PASSWORD": "supersecretpassword",
         "HOME": "/home/karaagy",
         "KARAAGY_PORT": "8000",
+        "KARAAGY_ENABLE_AUTO_PRUNE_SESSIONS": "true",
+        "KARAAGY_MAX_CONCURRENT_SESSIONS": "4",
     }
     with patch.dict(os.environ, mock_env, clear=True):
         env_dict = DiagnosticsManager.get_sanitized_environment()
-        assert "[REDACTED]" in env_dict["OPENAI_API_KEY"]
-        assert "[REDACTED]" in env_dict["MY_AUTH_TOKEN"]
-        assert "[REDACTED]" in env_dict["DATABASE_PASSWORD"]
+        assert env_dict["OPENAI_API_KEY"] == "[REDACTED]"
+        assert env_dict["MY_AUTH_TOKEN"] == "[REDACTED]"
+        assert env_dict["DATABASE_PASSWORD"] == "[REDACTED]"
         assert env_dict["HOME"] == "/home/karaagy"
         assert env_dict["KARAAGY_PORT"] == "8000"
+        assert env_dict["KARAAGY_ENABLE_AUTO_PRUNE_SESSIONS"] == "true"
+        assert env_dict["KARAAGY_MAX_CONCURRENT_SESSIONS"] == "4"
 
 
 def test_healthz_endpoint(client: TestClient) -> None:

@@ -22,12 +22,26 @@ SENSITIVE_KEYWORDS = (
     "TOKEN",
     "SECRET",
     "AUTH",
-    "PASS",
+    "PASSWORD",
+    "PASSWD",
     "CREDENTIAL",
     "PRIVATE",
     "COOKIE",
-    "SESSION",
 )
+
+# Known non-sensitive configuration keys that should never be redacted
+EXPLICIT_SAFE_KEYS = {
+    "KARAAGY_ENABLE_AUTO_PRUNE_SESSIONS",
+    "KARAAGY_MAX_CONCURRENT_SESSIONS",
+    "KARAAGY_DEFAULT_MODEL",
+    "KARAAGY_DEFAULT_EFFORT",
+    "KARAAGY_HOST",
+    "KARAAGY_PORT",
+    "KARAAGY_CACHE_TTL_SECONDS",
+    "KARAAGY_USAGE_CACHE_TTL_SECONDS",
+    "KARAAGY_MAX_RETRIES",
+    "KARAAGY_INITIAL_BACKOFF",
+}
 
 
 class DiagnosticsManager:
@@ -308,16 +322,18 @@ class DiagnosticsManager:
     @classmethod
     def is_sensitive_key(cls, key: str) -> bool:
         """Check if environment variable name contains sensitive secret keywords."""
+        if key in EXPLICIT_SAFE_KEYS:
+            return False
         key_upper = key.upper()
         return any(kw in key_upper for kw in SENSITIVE_KEYWORDS)
 
     @classmethod
     def get_sanitized_environment(cls) -> dict[str, str]:
-        """Return active OS environment variables with sensitive secrets masked."""
+        """Return active OS environment variables with sensitive secrets fully masked."""
         sanitized: dict[str, str] = {}
         for k, v in sorted(os.environ.items()):
             if cls.is_sensitive_key(k):
-                sanitized[k] = "[REDACTED]" if not v else f"{v[:3]}...[REDACTED]"
+                sanitized[k] = "[REDACTED]"
             else:
                 sanitized[k] = v
         return sanitized
