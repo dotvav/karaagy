@@ -50,3 +50,15 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+
+def cli_entrypoint() -> None:
+    """CLI entrypoint to launch the Karaagy gateway server."""
+    import uvicorn
+
+    uvicorn.run(
+        "karaagy.main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug,
+    )

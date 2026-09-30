@@ -4,10 +4,19 @@
 
 # Karaagy 🚀
 
+<p align="center">
+  <a href="https://github.com/roukine/karaagy/actions/workflows/ci.yml"><img src="https://github.com/roukine/karaagy/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
+  <a href="https://github.com/roukine/karaagy/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <img src="https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg" alt="Python 3.12 | 3.13" />
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff" /></a>
+  <img src="https://img.shields.io/badge/type%20checking-mypy%20strict-blue" alt="Mypy Strict" />
+  <img src="https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker" alt="Docker GHCR" />
+</p>
+
 > High-performance, lightweight OpenAI-compatible REST and SSE API gateway wrapping the Google Antigravity CLI (`agy`).
 
-
 Karaagy provides drop-in compatibility for standard OpenAI SDKs (Python, TypeScript), AI IDEs (Continue.dev, Cursor), and web UIs (Open WebUI, LibreChat) to communicate with Antigravity models.
+
 
 ---
 
@@ -15,6 +24,7 @@ Karaagy provides drop-in compatibility for standard OpenAI SDKs (Python, TypeScr
 
 - **OpenAI Standard Endpoints**: Supports `GET /v1/models` and `POST /v1/chat/completions`.
 - **Real-Time Streaming**: Full Server-Sent Events (SSE) streaming (`stream: true`) with token deltas.
+- **Interactive Web Status Dashboard**: Self-contained, responsive dashboard on `GET /` with live `/usage` quota tracking, concurrency metrics, sanitized environment inspector, and model alias mappings.
 - **Dynamic Model Discovery & Alias Routing**: Discovers available models from `agy models` with transparent mapping for common aliases (`gpt-4o`, `gpt-3.5-turbo`, `claude-3-5-sonnet`, `gemini-flash`).
 - **Storage Hygiene**: Automatically prunes ephemeral CLI transcripts and conversation state on completion.
 - **Resilience**: Built-in exponential backoff retries for transient OAuth/network glitches.
@@ -98,6 +108,24 @@ print()
 ```
 
 ---
+ 
+## 🖥️ Interactive Web Status Dashboard
+
+Access `http://localhost:8000/` in any browser to view the diagnostic dashboard:
+- ⚡ **Antigravity Quota Tracking (`/usage`)**: Visual progress bars showing remaining requests and reset times per model tier with on-demand cache refresh.
+- 📊 **Gateway Metrics**: Live concurrency, request count, and throughput.
+- 🤖 **Model Catalog & Aliases**: Active models and OpenAI compatibility aliases.
+- ⚙️ **Sanitized Environment**: Secure inspector with sensitive tokens automatically masked.
+
+---
+
+## 📚 Documentation
+
+- [User Guide](docs/user_guide.md) — Comprehensive client integration (Python, TypeScript, Open WebUI, LibreChat, Continue.dev, Cursor, Vision/Multimodal), model aliases, and configuration reference.
+- [Installation & Deployment Guide](docs/installation_guide.md) — Host user isolation (UID 8888), OAuth persistence, and Docker/Portainer production deployment.
+- [Developer Guide](docs/developer_guide.md) — Architecture, testing, and contribution guidelines.
+
+---
 
 ## 🧪 Verification & Static Checks
 
@@ -120,3 +148,4 @@ uv run pytest
 ```bash
 docker compose up -d
 ```
+

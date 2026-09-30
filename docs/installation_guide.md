@@ -45,7 +45,7 @@ If you prefer running Karaagy directly on the host for development:
 ### 2. Install & Run
 ```bash
 # Clone the repository
-git clone git@gitea.ruk.info:roukine/karaagy.git
+git clone https://github.com/roukine/karaagy.git
 cd karaagy
 
 # Install dependencies into virtualenv
@@ -66,7 +66,7 @@ version: "3.8"
 
 services:
   karaagy:
-    image: gitea.ruk.info/roukine/karaagy:latest
+    image: ghcr.io/roukine/karaagy:latest
     container_name: karaagy-api
     user: "8888:8888"
     restart: unless-stopped

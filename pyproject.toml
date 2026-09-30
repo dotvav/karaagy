@@ -1,8 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "karaagy"
 version = "0.1.0"
-description = "OpenAI-compatible REST and SSE API wrapper for Google Antigravity CLI"
+description = "High-performance OpenAI-compatible REST & SSE API gateway for Google Antigravity CLI"
 readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Vincent Roukine" }
+]
+keywords = ["openai", "antigravity", "gemini", "fastapi", "llm-gateway", "sse-streaming", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
@@ -10,6 +33,15 @@ dependencies = [
     "pydantic-settings>=2.6.0",
     "uvicorn>=0.32.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/roukine/karaagy"
+Repository = "https://github.com/roukine/karaagy"
+Documentation = "https://github.com/roukine/karaagy#readme"
+Issues = "https://github.com/roukine/karaagy/issues"
+
+[project.scripts]
+karaagy = "karaagy.main:cli_entrypoint"
 
 [dependency-groups]
 dev = [
@@ -42,12 +74,6 @@ python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 explicit_package_bases = true
-
-# Performance optimization: skip heavy 3rd party type-checking for fast cold-start checks
-[[tool.mypy.overrides]]
-module = ["litellm.*", "curl_cffi.*", "apprise.*"]
-follow_imports = "skip"
-ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
