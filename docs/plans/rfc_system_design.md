@@ -243,7 +243,7 @@ karaagy/
 │   ├── test_prompt_builder.py
 │   └── test_sanitization.py
 ├── Dockerfile                    # Containerization with non-root appuser
-├── docker-compose.yml            # Portainer / Docker Compose definition
+├── docker-compose.yml            # Docker Compose definition
 ├── pyproject.toml
 └── README.md
 ```

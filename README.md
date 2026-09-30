@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker" alt="Docker GHCR" />
 </p>
 
-**Karaagy** is a lightweight, high-performance API **gateway** that wraps the Google Antigravity CLI (`agy`) into a standard OpenAI-compatible REST and SSE interface. Think of it as that **sweet nugget** bridging the gap between cutting-edge Antigravity intelligence and your favorite AI tools—providing drop-in compatibility for standard OpenAI SDKs (Python, TypeScript), AI IDEs (Continue.dev, Cursor), and self-hosted web UIs (Open WebUI, LibreChat).
+**Karaagy** is a lightweight, high-performance API **gateway** that wraps the Google Antigravity CLI (`agy`) into a standard OpenAI-compatible REST and SSE interface. Think of it as that **sweet nugget** bridging the gap between cutting-edge Antigravity intelligence and your favorite AI tools—providing drop-in compatibility for standard OpenAI SDKs (Python, TypeScript), self-hosted web UIs (Open WebUI, LibreChat), and backend automation services (e.g. Mealie, data classification, and extraction pipelines).
 
 
 
@@ -146,7 +146,7 @@ Access `http://localhost:8000/` in any browser to view the diagnostic dashboard:
 ## 📚 Documentation
 
 - [User Guide](docs/user_guide.md) — Comprehensive client integration (Python, TypeScript, Open WebUI, LibreChat, Continue.dev, Cursor, Vision/Multimodal), model aliases, and configuration reference.
-- [Installation & Deployment Guide](docs/installation_guide.md) — Host user isolation (UID 8888), OAuth persistence, and Docker/Portainer production deployment.
+- [Installation & Deployment Guide](docs/installation_guide.md) — Host user isolation (UID 8888), OAuth persistence, and Docker production deployment.
 - [Developer Guide](docs/developer_guide.md) — Architecture, testing, and contribution guidelines.
 
 ---

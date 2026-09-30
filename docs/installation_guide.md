@@ -1,6 +1,6 @@
 # Installation & Deployment Guide
 
-This guide details the setup and deployment architecture for **Karaagy**, covering local installation, dedicated host user isolation (UID 8888), Google Antigravity OAuth persistence, and production Docker/Portainer deployment.
+This guide details the setup and deployment architecture for **Karaagy**, covering local installation, dedicated host user isolation (UID 8888), Google Antigravity OAuth persistence, and production Docker deployment.
 
 ---
 
@@ -57,7 +57,7 @@ uv run uvicorn karaagy.main:app --reload --port 8000
 
 ---
 
-## 3. Production Container Deployment (Docker & Portainer)
+## 3. Production Container Deployment (Docker Compose)
 
 ### `docker-compose.yml` Specification
 

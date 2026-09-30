@@ -8,7 +8,7 @@ This guide is intended for developers, AI engineers, and system operators who co
 
 * **Application Developers**: Integrating LLMs into apps using the official OpenAI SDK (Python, TypeScript/JavaScript, Go, Rust) or orchestration frameworks (LangChain, LlamaIndex, Semantic Kernel).
 * **Self-Hosted & Automation Services**: Powering dedicated applications that integrate standard OpenAI endpoints for backend processing (e.g. **Mealie** for recipe ingestion/ingredient parsing, content classifiers, web scrapers, data tagging, and automated text evaluation).
-* **AI Tool & IDE Users**: Powering developer tools like **Continue.dev**, **Cursor**, **Aider**, or **Cline** with Google Antigravity models.
+* **IDE Chat & Code Assistants**: Querying models from tools like **Continue.dev**, **Cursor**, or **Aider** in pure chat / explanation mode.
 * **Self-Hosted AI UI Operators**: Connecting chat interfaces like **Open WebUI**, **LibreChat**, or **Dify** to local/hosted Antigravity backends.
 * **Operators & Sysadmins**: Monitoring quota usage, rate limits, active gateway throughput, and service status via the built-in Web Dashboard.
 
