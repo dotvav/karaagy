@@ -134,5 +134,19 @@ async def get_favicon() -> Response:
     return Response(content=svg_content, media_type="image/svg+xml")
 ```
 
+---
 
+## 🛠️ 12. Gitea Act Runner vs GitHub Actions Workflow Isolation
+- **Last Updated**: 2026-09-30T09:45:00Z
+- **The Issue**: Gitea Act Runner executes both `.gitea/workflows/` and `.github/workflows/` YAML files if present in the repository. When dual workflows exist (e.g. for dual hosting on private Gitea and public GitHub), the Gitea runner triggers GitHub Actions jobs that lack Gitea runner caching or authentication fallback logic, leading to duplicate or failing CI runs.
+- **The Gotcha**: Without runner server URL filtering, Gitea Act treats `.github/workflows/` as valid workflow targets.
+- **Code / Solution**: Add a top-level job condition `if: github.server_url == 'https://github.com'` to workflows under `.github/workflows/` so they are silently skipped when parsed on private Gitea runners.
+
+---
+
+## 🛠️ 13. IDE Coding Assistant Tool Collision & Execution Hijacking
+- **Last Updated**: 2026-09-30T09:50:00Z
+- **The Issue**: Exposing an agentic CLI (`agy`) as an OpenAI gateway for IDE coding assistants (Cursor, Continue.dev, Cline, Aider) causes tool execution collisions. If the client requests tool executions (`read_file`, `run_command`, `git_status`), `agy` executes them on the gateway host machine (under `--dangerously-skip-permissions`) instead of the user's local IDE workspace, hijacking tool execution and breaking OpenAI `delta.tool_calls` JSON streams.
+- **The Gotcha**: Karaagy is an agent wrapper, not a raw token inference API. IDEs running autonomous tool loops expect JSON tool calls, but receive markdown execution output or trigger server-side file mutations.
+- **Code / Solution**: Classify IDE chat/explanation as **Ideal**, but explicitly mark autonomous IDE agents as **Incompatible**. Document safe client configurations disabling client-side tool loops (e.g. Continue.dev `capabilities: { tools: false }` and Aider `--chat-mode ask`).
 

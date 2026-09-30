@@ -13,9 +13,8 @@
   <img src="https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker" alt="Docker GHCR" />
 </p>
 
-> High-performance, lightweight OpenAI-compatible REST and SSE API gateway wrapping the Google Antigravity CLI (`agy`).
+**Karaagy** is a lightweight, high-performance API **gateway** that wraps the Google Antigravity CLI (`agy`) into a standard OpenAI-compatible REST and SSE interface. Think of it as that **sweet nugget** bridging the gap between cutting-edge Antigravity intelligence and your favorite AI tools—providing drop-in compatibility for standard OpenAI SDKs (Python, TypeScript), AI IDEs (Continue.dev, Cursor), and self-hosted web UIs (Open WebUI, LibreChat).
 
-Karaagy provides drop-in compatibility for standard OpenAI SDKs (Python, TypeScript), AI IDEs (Continue.dev, Cursor), and web UIs (Open WebUI, LibreChat) to communicate with Antigravity models.
 
 
 ---
@@ -28,6 +27,31 @@ Karaagy provides drop-in compatibility for standard OpenAI SDKs (Python, TypeScr
 - **Dynamic Model Discovery & Alias Routing**: Discovers available models from `agy models` with transparent mapping for common aliases (`gpt-4o`, `gpt-3.5-turbo`, `claude-3-5-sonnet`, `gemini-flash`).
 - **Storage Hygiene**: Automatically prunes ephemeral CLI transcripts and conversation state on completion.
 - **Resilience**: Built-in exponential backoff retries for transient OAuth/network glitches.
+
+---
+
+## ⚠️ Important Architectural Caveat: Underlying Agentic Layer vs Raw LLM
+
+> [!WARNING]
+> **Karaagy wraps an autonomous AI coding assistant (`agy`), NOT a raw inference API.**
+
+Unlike direct model endpoints (e.g. standard OpenAI, Anthropic, or Vertex AI APIs) that return pure next-token probability completions, the underlying Google Antigravity CLI operates as an **agentic system** with its own built-in meta-prompt, coding rules, and tool capabilities.
+
+### 📌 Recommended vs Incompatible Use Cases:
+
+* ✅ **Ideal & Recommended**:
+  - **Self-Hosted & Specialized Applications**: Services with OpenAI-compatible backend connectors (e.g. **Mealie** for recipe parsing/ingredient analysis, home lab automation bots, data extraction pipelines) for classification, summarization, structured tagging, and content judging.
+  - **Interactive Chat UIs**: Open WebUI, LibreChat, and self-hosted chat portals.
+  - **IDE Chat & Explanation Modes**: Continue.dev (sidebar chat, `/edit`), Cursor Chat (`Cmd+L`), and Aider (`--chat-mode ask`) for questions, code explanation, and diff suggestions.
+  - **Direct Script Ingestion**: Python/Node.js scripts for summarization, translation, classification, and code drafting.
+
+* ⚠️ **Qualified / Requires Care**:
+  - **IDE Prompt-Based Refactoring**: Continue.dev or Aider without client-side tool loops (configure with `capabilities: { tools: false }`).
+
+* ❌ **Incompatible / High Risk of Collisions**:
+  - **IDE Autonomous / Agentic Tool Modes (Cursor Composer Agent, Cline Act Mode, Aider Auto-Commit)**: When an IDE tool loop injects tools (`read_file`, `run_command`, `git_status`), `agy` executes them on the **gateway host machine** instead of the user's local workspace, causing **execution hijacking**, namespace collisions, and broken `delta.tool_calls` JSON streams.
+  - **Autonomous Agent Harnesses (OpenClaw, SWE-bench runners, AutoGPT)**: Nested agent architectures triggering conflicting tool recursion.
+  - **Strict Deterministic Benchmarks**: Evaluations requiring raw base model completion without Antigravity meta-prompt bias.
 
 ---
 

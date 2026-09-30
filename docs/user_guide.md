@@ -7,9 +7,76 @@ This guide is intended for developers, AI engineers, and system operators who co
 ## 🎯 Target Audience & Use Cases
 
 * **Application Developers**: Integrating LLMs into apps using the official OpenAI SDK (Python, TypeScript/JavaScript, Go, Rust) or orchestration frameworks (LangChain, LlamaIndex, Semantic Kernel).
+* **Self-Hosted & Automation Services**: Powering dedicated applications that integrate standard OpenAI endpoints for backend processing (e.g. **Mealie** for recipe ingestion/ingredient parsing, content classifiers, web scrapers, data tagging, and automated text evaluation).
 * **AI Tool & IDE Users**: Powering developer tools like **Continue.dev**, **Cursor**, **Aider**, or **Cline** with Google Antigravity models.
 * **Self-Hosted AI UI Operators**: Connecting chat interfaces like **Open WebUI**, **LibreChat**, or **Dify** to local/hosted Antigravity backends.
 * **Operators & Sysadmins**: Monitoring quota usage, rate limits, active gateway throughput, and service status via the built-in Web Dashboard.
+
+---
+
+## ⚠️ Important Architectural Caveat: Underlying Agentic Layer vs Raw LLM
+
+> [!WARNING]
+> **Karaagy exposes an autonomous AI coding assistant (`agy`), NOT a raw token-inference API.**
+
+Unlike direct LLM APIs (e.g. standard OpenAI, Anthropic, or Vertex AI endpoints) that simply predict tokens based on prompt probability distributions, the underlying Google Antigravity CLI is an **interactive agent system** with built-in system prompts, toolsets, and coding behaviors.
+
+### 🔍 Failure Modes & Tool Collisions:
+
+1. **Remote Execution Hijacking (Gateway Host vs Local Client)**:
+   - When an IDE or agent harness requests a tool execution (e.g. `read_file`, `run_command`, `git_status`), `agy` executes that command on the **gateway host/container environment** (with `--dangerously-skip-permissions`), not inside the user's local IDE workspace or repository.
+   - If the IDE client and `agy` share tool names, `agy` intercepts and executes on the server side, returning plaintext outputs instead of standard OpenAI `delta.tool_calls` JSON payloads, breaking the IDE's client-side tool loop.
+2. **Nested Autonomous Agent Collisions (OpenClaw, SWE-agent, AutoGPT, Cline Act Mode)**:
+   - Nested agent architectures create infinite reflection loops, duplicate tool executions, or unexpected file mutations on the host server.
+3. **Meta-Prompt Bias & Hyperparameter Abstraction**:
+   - Responses reflect built-in Antigravity developer system instructions that cannot be completely stripped by client prompts.
+   - Sampling controls (`temperature`, `top_p`, `seed`, `logprobs`) are managed internally by the Antigravity backend.
+
+---
+
+### 📊 Recommended vs Incompatible Use Cases:
+
+| Mode / Environment | Compatibility | Recommendation & Configuration |
+| :--- | :---: | :--- |
+| **Self-Hosted Services & Automation (Mealie, bots, classifiers)** | ✅ **Ideal** | Recipe parsing, text classification, summarization, entity extraction, and content judging without tool loops. |
+| **Chat UIs (Open WebUI, LibreChat, Dify)** | ✅ **Ideal** | Standard chat completion, multi-turn Q&A, and system prompts work out-of-the-box. |
+| **IDE Chat & Explanation (Continue, Cursor `Cmd+L`, Aider `/ask`)** | ✅ **Ideal** | Asking questions, reviewing code, writing docstrings, and explaining algorithms. |
+| **IDE Code Editing / Prompt Refactor (Continue `/edit`)** | ⚠️ **Qualified** | Safe when client-side tool calling is disabled (`capabilities: { tools: false }`). |
+| **IDE Autonomous Agents (Cursor Composer Agent, Cline Act Mode)** | ❌ **Incompatible** | Tool namespace collision and remote host execution hijacking risk. |
+| **Autonomous Agent Harnesses (OpenClaw, SWE-bench, AutoGPT)** | ❌ **Incompatible** | High risk of tool loop recursion and protocol failure. |
+| **Raw Base Model Evaluation / Token Benchmarks** | ❌ **Incompatible** | Cannot bypass Antigravity system meta-prompt. |
+
+---
+
+### 🛠️ Safe IDE Client Configuration
+
+#### Continue.dev (`config.json`)
+Explicitly disable client tool invocation to ensure pure text/diff streaming without tool collisions:
+
+```json
+{
+  "models": [
+    {
+      "title": "Karaagy Flash High",
+      "provider": "openai",
+      "model": "gemini-3.8-flash-high",
+      "apiBase": "http://localhost:8000/v1",
+      "apiKey": "none",
+      "capabilities": {
+        "tools": false
+      }
+    }
+  ]
+}
+```
+
+#### Aider CLI
+Launch Aider in `ask` mode so it performs prompt-based discussion without auto-committing or attempting host tool calls:
+
+```bash
+aider --openai-api-base http://localhost:8000/v1 --openai-api-key none --model openai/gemini-3.8-flash-high --chat-mode ask
+```
+
 
 ---
 

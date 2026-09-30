@@ -10,6 +10,7 @@ on:
 jobs:
   test:
     name: Test & Static Analysis (Python ${{ matrix.python-version }})
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
