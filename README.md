@@ -1,6 +1,11 @@
+<p align="center">
+  <img src="assets/karaagy-logo.svg" alt="Karaagy Logo" width="180" />
+</p>
+
 # Karaagy 🚀
 
 > High-performance, lightweight OpenAI-compatible REST and SSE API gateway wrapping the Google Antigravity CLI (`agy`).
+
 
 Karaagy provides drop-in compatibility for standard OpenAI SDKs (Python, TypeScript), AI IDEs (Continue.dev, Cursor), and web UIs (Open WebUI, LibreChat) to communicate with Antigravity models.
 

@@ -1,7 +1,35 @@
 """Self-contained, responsive HTML status page template renderer for Karaagy."""
 
+import base64
+import functools
 import html
+from pathlib import Path
 from typing import Any
+
+
+@functools.lru_cache(maxsize=1)
+def get_logo_svg() -> str:
+    """Load the official Karaagy SVG logo from disk with fallbacks."""
+    candidates = [
+        Path(__file__).parents[3] / "assets" / "karaagy-logo.svg",
+        Path.cwd() / "assets" / "karaagy-logo.svg",
+    ]
+    for p in candidates:
+        if p.is_file():
+            try:
+                return p.read_text(encoding="utf-8")
+            except Exception:
+                pass
+    return ""
+
+
+@functools.lru_cache(maxsize=1)
+def get_logo_b64() -> str:
+    """Return base64-encoded SVG logo for favicon embedding."""
+    svg = get_logo_svg()
+    if svg:
+        return base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return ""
 
 
 def render_status_html(
@@ -128,6 +156,13 @@ def render_status_html(
   }}'"""
 
     quota_age = quota_data.get("cache_age_formatted", "cached")
+    logo_svg = get_logo_svg()
+    logo_b64 = get_logo_b64()
+    favicon_tag = (
+        f'<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,{logo_b64}">'
+        if logo_b64
+        else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -135,6 +170,7 @@ def render_status_html(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{html.escape(settings_dict.get("app_name", "Karaagy"))} Gateway Status</title>
+    {favicon_tag}
     <style>
         :root {{
             --bg: #0d1117;
@@ -201,7 +237,20 @@ def render_status_html(
         .header-title-block {{
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
+        }}
+        .header-logo {{
+            width: 44px;
+            height: 44px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .header-logo svg {{
+            width: 100%;
+            height: 100%;
+            display: block;
         }}
         h1 {{
             font-size: 1.4rem;
@@ -459,8 +508,11 @@ def render_status_html(
         <!-- Header -->
         <header>
             <div class="header-title-block">
-                <h1>⚡ {html.escape(settings_dict.get("app_name", "Karaagy"))}</h1>
-                <span class="status-badge"><span class="status-dot"></span> Online</span>
+                {f'<div class="header-logo">{logo_svg}</div>' if logo_svg else ""}
+                <div>
+                    <h1>{html.escape(settings_dict.get("app_name", "Karaagy"))}</h1>
+                    <span class="status-badge"><span class="status-dot"></span> Online</span>
+                </div>
             </div>
             <div class="header-meta">
                 <div class="meta-item">Karaagy: <strong>{html.escape(version_info.get("display", "0.1.0"))}</strong></div>
