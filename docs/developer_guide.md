@@ -10,32 +10,34 @@ Karaagy acts as an asynchronous translation bridge between the standard **OpenAI
 
 ```mermaid
 flowchart TD
-    Client["AI Client / IDE / WebUI<br>(OpenAI SDK, Open WebUI, Continue.dev)"]
+    Client["AI Client / IDE / WebUI<br/>(OpenAI SDK, Open WebUI, Continue.dev)"]
     
-    subgraph Karaagy Gateway ["Karaagy Gateway (FastAPI)"]
-        Router["FastAPI Router<br>(/v1/chat/completions, /v1/models, /)"]
-        Registry["Model Registry & Aliases<br>(gpt-4o → gemini-3.8-flash-high)"]
-        PromptBuilder["Prompt Unroller & Vision Extractor<br>(extract_message_text)"]
-        Semaphore["Concurrency Guard<br>(asyncio.Semaphore = 4)"]
-        ProcessEngine["Subprocess Execution Engine<br>(process.py)"]
-        Diagnostics["Diagnostics Manager<br>(/usage caching & redaction)"]
+    subgraph Gateway ["Karaagy Gateway (FastAPI)"]
+        Router["FastAPI Router<br/>(/v1/chat/completions, /v1/models, /)"]
+        Registry["Model Registry & Aliases<br/>(gpt-4o to gemini-3.8-flash-high)"]
+        PromptBuilder["Prompt Unroller & Vision Extractor<br/>(extract_message_text)"]
+        Semaphore["Concurrency Guard<br/>(asyncio.Semaphore = 4)"]
+        ProcessEngine["Subprocess Execution Engine<br/>(process.py)"]
+        Diagnostics["Diagnostics Manager<br/>(/usage caching & redaction)"]
     end
     
-    subgraph Host Isolation ["Host Subprocess Environment"]
-        AgyCLI["Google Antigravity CLI (agy)<br>(stdin piping & streaming JSON)"]
-        OAuthStorage["OAuth Credential Store<br>(~/.gemini)"]
+    subgraph Host ["Host Subprocess Environment"]
+        AgyCLI["Google Antigravity CLI (agy)<br/>(stdin piping & streaming JSON)"]
+        OAuthStorage["OAuth Credential Store<br/>(~/.gemini)"]
     end
 
     Client -->|HTTP POST /v1/chat/completions| Router
     Router --> Registry
     Router --> PromptBuilder
+    Router --> Diagnostics
+    Diagnostics <-->|agy -p /usage| AgyCLI
     PromptBuilder --> Semaphore
     Semaphore --> ProcessEngine
     ProcessEngine -->|Stream stdin / args| AgyCLI
     AgyCLI <--> OAuthStorage
     AgyCLI -->|NDJSON stdout chunks| ProcessEngine
     ProcessEngine -->|SSE Events / JSON| Router
-    Router -->|data: {delta: ...}| Client
+    Router -->|data: delta chunks| Client
 ```
 
 ---
