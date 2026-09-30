@@ -88,3 +88,25 @@ def test_v1_health_endpoint(client: TestClient) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
+
+
+def test_favicon_endpoints(client: TestClient) -> None:
+    """Test /favicon.ico and /favicon.svg return SVG content."""
+    res_ico = client.get("/favicon.ico")
+    assert res_ico.status_code == 200
+    assert "image/svg+xml" in res_ico.headers["content-type"]
+    assert "<svg" in res_ico.text
+
+    res_svg = client.get("/favicon.svg")
+    assert res_svg.status_code == 200
+    assert "image/svg+xml" in res_svg.headers["content-type"]
+    assert "<svg" in res_svg.text
+
+
+def test_html_status_page_contains_logo_and_favicon(client: TestClient) -> None:
+    """Test GET / with HTML accept header embeds logo and favicon tag."""
+    response = client.get("/", headers={"Accept": "text/html"})
+    assert response.status_code == 200
+    assert "header-logo" in response.text
+    assert 'rel="icon"' in response.text
+    assert "<svg" in response.text

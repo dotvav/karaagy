@@ -3,10 +3,10 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from karaagy.api.templates import render_status_html
+from karaagy.api.templates import get_logo_svg, render_status_html
 from karaagy.config import settings
 from karaagy.core.diagnostics import DiagnosticsManager
 from karaagy.core.registry import MODEL_ALIASES, ModelRegistry
@@ -133,3 +133,15 @@ async def refresh_usage_quota() -> Any:
         "status": "refreshed",
         "quota": fresh_quota,
     }
+
+
+@router.get("/favicon.ico", include_in_schema=False)
+@router.get("/favicon.svg", include_in_schema=False)
+async def get_favicon() -> Response:
+    """Serve the official Karaagy SVG icon for browser favicon requests."""
+    svg_content = get_logo_svg()
+    return Response(
+        content=svg_content,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )

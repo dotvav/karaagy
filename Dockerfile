@@ -31,8 +31,9 @@ ENV PATH="/app/.venv/bin:/home/karaagy/.local/bin:$PATH"
 ENV PYTHONPATH="/app/src"
 
 USER root
-# Copy application source code
+# Copy application source code and assets
 COPY --chown=karaagy:karaagy src/ ./src/
+COPY --chown=karaagy:karaagy assets/ ./assets/
 COPY --chown=karaagy:karaagy README.md ./
 
 USER karaagy

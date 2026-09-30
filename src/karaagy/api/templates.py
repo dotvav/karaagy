@@ -11,8 +11,11 @@ from typing import Any
 def get_logo_svg() -> str:
     """Load the official Karaagy SVG logo from disk with fallbacks."""
     candidates = [
+        Path(__file__).parent.parent / "assets" / "karaagy-logo.svg",
         Path(__file__).parents[3] / "assets" / "karaagy-logo.svg",
         Path.cwd() / "assets" / "karaagy-logo.svg",
+        Path("/app/assets/karaagy-logo.svg"),
+        Path("/app/src/karaagy/assets/karaagy-logo.svg"),
     ]
     for p in candidates:
         if p.is_file():

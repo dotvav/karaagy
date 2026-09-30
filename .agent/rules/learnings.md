@@ -113,8 +113,26 @@ vtracer.convert_image_to_svg_py(
     hierarchical="stacked",
     filter_speckle=6,
     color_precision=6,
-    layer_difference=16,
-)
 ```
+
+---
+
+## 🛠️ 11. Docker Image Asset Bundling & Browser Favicon Delivery
+- **Last Updated**: 2026-09-30T08:08:15Z
+- **The Issue**: In containerized environments, assets located in the project root (`assets/`) are missing unless explicitly copied by the Dockerfile (`COPY assets/ ./assets/`). Additionally, modern web browsers make implicit requests to `GET /favicon.ico` or `GET /favicon.svg` which return HTTP 404 unless explicit router endpoints are mounted.
+- **The Gotcha**: Python packages should bundle fallback assets inside `src/<package>/assets/` and check both package-relative and container root paths. Providing dedicated `@router.get("/favicon.ico")` and `@router.get("/favicon.svg")` handlers ensures clean favicon delivery across all browsers.
+- **Code / Solution**:
+```dockerfile
+COPY --chown=karaagy:karaagy src/ ./src/
+COPY --chown=karaagy:karaagy assets/ ./assets/
+```
+```python
+@router.get("/favicon.ico", include_in_schema=False)
+@router.get("/favicon.svg", include_in_schema=False)
+async def get_favicon() -> Response:
+    svg_content = get_logo_svg()
+    return Response(content=svg_content, media_type="image/svg+xml")
+```
+
 
 
