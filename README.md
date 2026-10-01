@@ -25,6 +25,7 @@
 - **Real-Time Streaming**: Full Server-Sent Events (SSE) streaming (`stream: true`) with token deltas.
 - **Interactive Web Status Dashboard**: Self-contained, responsive dashboard on `GET /` with live `/usage` quota tracking, concurrency metrics, sanitized environment inspector, and model alias mappings.
 - **Dynamic Model Discovery & Alias Routing**: Discovers available models from `agy models` with transparent mapping for common aliases (`gpt-4o`, `gpt-3.5-turbo`, `claude-3-5-sonnet`, `gemini-flash`).
+- **Container Isolation & Security**: Pre-built Docker image (`ghcr.io/dotvav/karaagy`) operating under an isolated non-root user (UID `8888`) with persistent OAuth credential mounting.
 - **Storage Hygiene**: Automatically prunes ephemeral CLI transcripts and conversation state on completion.
 - **Resilience**: Built-in exponential backoff retries for transient OAuth/network glitches.
 
