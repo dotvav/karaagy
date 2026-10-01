@@ -30,14 +30,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         periodic_image_cache_cleanup_loop,
         prune_expired_cached_images,
     )
+    from karaagy.core.threads import (
+        ThreadManager,
+        periodic_thread_cleanup_loop,
+    )
 
     asyncio.create_task(DiagnosticsManager.get_account_quota())
     prune_expired_cached_images()
-    cleanup_task = asyncio.create_task(periodic_image_cache_cleanup_loop())
+    ThreadManager.prune_expired_threads()
+    img_cleanup_task = asyncio.create_task(periodic_image_cache_cleanup_loop())
+    thread_cleanup_task = asyncio.create_task(periodic_thread_cleanup_loop())
     try:
         yield
     finally:
-        cleanup_task.cancel()
+        img_cleanup_task.cancel()
+        thread_cleanup_task.cancel()
         logger.info("Shutting down %s", settings.app_name)
 
 
