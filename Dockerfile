@@ -15,8 +15,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Copy dependency manifests
 COPY pyproject.toml uv.lock ./
 
-# Install python dependencies into virtualenv
-RUN uv sync --frozen --no-dev
+# Install python dependencies into virtualenv (without project source)
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Create non-root karaagy user (UID 8888)
 RUN useradd -m -u 8888 karaagy && \
@@ -35,6 +35,9 @@ USER root
 COPY --chown=karaagy:karaagy src/ ./src/
 COPY --chown=karaagy:karaagy assets/ ./assets/
 COPY --chown=karaagy:karaagy README.md ./
+
+# Install project package into virtualenv
+RUN uv sync --frozen --no-dev
 
 USER karaagy
 

@@ -150,3 +150,20 @@ async def get_favicon() -> Response:
 - **The Gotcha**: Karaagy is an agent wrapper, not a raw token inference API. IDEs running autonomous tool loops expect JSON tool calls, but receive markdown execution output or trigger server-side file mutations.
 - **Code / Solution**: Classify IDE chat/explanation as **Ideal**, but explicitly mark autonomous IDE agents as **Incompatible**. Document safe client configurations disabling client-side tool loops (e.g. Continue.dev `capabilities: { tools: false }` and Aider `--chat-mode ask`).
 
+---
+
+## 🛠️ 14. Docker Multi-Stage Layer Caching with `uv sync --no-install-project`
+- **Last Updated**: 2026-10-01T07:05:00Z
+- **The Issue**: In a Dockerfile where dependency manifests (`pyproject.toml`, `uv.lock`) are copied before application source (`src/`), running `uv sync --frozen --no-dev` fails with exit code 1 because `uv` attempts to install the project itself in editable/standard mode before its source tree exists.
+- **The Gotcha**: `uv sync` installs both third-party dependencies and the current package by default.
+- **Code / Solution**: Split the dependency installation and project installation into two distinct cache layers:
+```dockerfile
+COPY pyproject.toml uv.lock ./
+# 1. Cache third-party dependencies layer
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY src/ ./src/
+# 2. Install project package layer
+RUN uv sync --frozen --no-dev
+```
+
