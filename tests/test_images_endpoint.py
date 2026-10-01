@@ -77,7 +77,11 @@ def test_images_generations_url_and_fetch(
         assert "/v1/images/files/img_" in img_url
         filename = img_url.split("/")[-1]
 
-        # Verify fetching the image from the GET endpoint
+        # Verify fetching the image from the GET and HEAD endpoints
+        head_res = client.head(f"/v1/images/files/{filename}")
+        assert head_res.status_code == 200
+        assert head_res.headers["content-type"].startswith("image/jpeg")
+
         file_res = client.get(f"/v1/images/files/{filename}")
         assert file_res.status_code == 200
         assert file_res.headers["content-type"].startswith("image/jpeg")
@@ -131,3 +135,42 @@ async def test_generate_single_image_success(tmp_path: Path) -> None:
         )
         assert img_bytes == b"PNGDATA"
         assert mime_type == "image/png"
+
+
+def test_prune_expired_cached_images(tmp_path: Path) -> None:
+    """Test pruning of files older than TTL."""
+    import os
+    import time
+
+    from karaagy.core.images import prune_expired_cached_images
+
+    old_file = tmp_path / "img_old.jpg"
+    old_file.write_bytes(b"old")
+    # Set mtime to 2 days ago
+    os.utime(str(old_file), (time.time() - 172800, time.time() - 172800))
+
+    new_file = tmp_path / "img_new.jpg"
+    new_file.write_bytes(b"new")
+
+    with patch.object(settings, "image_cache_dir", tmp_path):
+        with patch.object(settings, "image_cache_ttl_seconds", 86400.0):
+            pruned = prune_expired_cached_images()
+            assert pruned == 1
+            assert not old_file.exists()
+            assert new_file.exists()
+
+
+def test_get_cached_image_expired(client: TestClient, tmp_path: Path) -> None:
+    """Test 404 when requested image has expired past TTL."""
+    import os
+    import time
+
+    expired_file = tmp_path / "img_expired.jpg"
+    expired_file.write_bytes(b"expired")
+    os.utime(str(expired_file), (time.time() - 100000, time.time() - 100000))
+
+    with patch.object(settings, "image_cache_dir", tmp_path):
+        with patch.object(settings, "image_cache_ttl_seconds", 86400.0):
+            response = client.get("/v1/images/files/img_expired.jpg")
+            assert response.status_code == 404
+            assert not expired_file.exists()

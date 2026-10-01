@@ -274,4 +274,6 @@ All settings can be customized via environment variables prefixed with `KARAAGY_
 | `KARAAGY_MAX_CONCURRENT_SESSIONS`| Max parallel `agy` executions (semaphore guard; `0` for unlimited)| `4` |
 | `KARAAGY_ENABLE_AUTO_PRUNE_SESSIONS`| Purges temporary conversation history after each call | `true` |
 | `KARAAGY_PUBLIC_BASE_URL` | Explicit public URL override for status page & snippets | `None` (auto-detected) |
+| `KARAAGY_IMAGE_CACHE_TTL_SECONDS` | Retention period in seconds before purging generated images from disk | `86400.0` (24h) |
+| `KARAAGY_IMAGE_CACHE_DIR` | Directory path for cached image files | `/tmp/karaagy_images_cache` |
 | `KARAAGY_DEBUG` | Enables verbose HTTP debug logging | `false` |

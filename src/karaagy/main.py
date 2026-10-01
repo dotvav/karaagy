@@ -26,10 +26,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Warm up model registry and quota caches in background
     asyncio.create_task(ModelRegistry.get_available_models())
     from karaagy.core.diagnostics import DiagnosticsManager
+    from karaagy.core.images import (
+        periodic_image_cache_cleanup_loop,
+        prune_expired_cached_images,
+    )
 
     asyncio.create_task(DiagnosticsManager.get_account_quota())
-    yield
-    logger.info("Shutting down %s", settings.app_name)
+    prune_expired_cached_images()
+    cleanup_task = asyncio.create_task(periodic_image_cache_cleanup_loop())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        logger.info("Shutting down %s", settings.app_name)
 
 
 app = FastAPI(

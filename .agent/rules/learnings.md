@@ -177,10 +177,10 @@ RUN uv sync --frozen --no-dev
 
 ---
 
-## 🛠️ 16. OpenAI Image Generation (`POST /v1/images/generations`) via Isolated `agy` Subprocesses
-- **Last Updated**: 2026-10-01T08:45:00Z
-- **The Issue**: Supporting standard OpenAI image generation requests (`POST /v1/images/generations`) using Antigravity CLI without native raster diffusion APIs.
-- **The Gotcha**: `agy` CLI invokes its internal `generate_image` tool when given `--dangerously-skip-permissions` in non-interactive print mode (`-p`). To prevent file collisions and extract generated artifacts safely, the subprocess must run within an isolated temporary directory (`tempfile.TemporaryDirectory`), scan for output raster formats (`.png`, `.jpg`, `.jpeg`, `.webp`), and return either Base64 (`b64_json`) or persist to a designated cache served via `GET /v1/images/files/{filename}` with strict path traversal validation.
+## 🛠️ 16. OpenAI Image Generation (`POST /v1/images/generations`) via Isolated `agy` Subprocesses & 24h TTL Eviction
+- **Last Updated**: 2026-10-01T08:59:00Z
+- **The Issue**: Supporting standard OpenAI image generation requests (`POST /v1/images/generations`) using Antigravity CLI without native raster diffusion APIs, and preventing image cache disk growth over time.
+- **The Gotcha**: `agy` CLI invokes its internal `generate_image` tool when given `--dangerously-skip-permissions` in non-interactive print mode (`-p`). To prevent file collisions and extract generated artifacts safely, the subprocess must run within an isolated temporary directory (`tempfile.TemporaryDirectory`), scan for output raster formats (`.png`, `.jpg`, `.jpeg`, `.webp`), and return either Base64 (`b64_json`) or persist to a designated cache served via `GET /v1/images/files/{filename}` with strict path traversal validation and automatic 24h TTL disk eviction.
 - **Code / Solution**:
 ```python
 # Execute in isolated temporary directory and retrieve the generated image

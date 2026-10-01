@@ -39,6 +39,8 @@ EXPLICIT_SAFE_KEYS = {
     "KARAAGY_PORT",
     "KARAAGY_CACHE_TTL_SECONDS",
     "KARAAGY_USAGE_CACHE_TTL_SECONDS",
+    "KARAAGY_IMAGE_CACHE_TTL_SECONDS",
+    "KARAAGY_IMAGE_CACHE_DIR",
     "KARAAGY_MAX_RETRIES",
     "KARAAGY_INITIAL_BACKOFF",
 }
@@ -354,6 +356,8 @@ class DiagnosticsManager:
             "initial_backoff": settings.initial_backoff,
             "cache_ttl_seconds": settings.cache_ttl_seconds,
             "usage_cache_ttl_seconds": settings.usage_cache_ttl_seconds,
+            "image_cache_ttl_seconds": settings.image_cache_ttl_seconds,
+            "image_cache_dir": str(settings.image_cache_dir),
             "resolved_agy_bin": settings.resolve_agy_bin(),
             "antigravity_home": str(settings.antigravity_home),
         }

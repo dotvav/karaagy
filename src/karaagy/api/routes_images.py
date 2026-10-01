@@ -90,8 +90,9 @@ async def create_image_generation(request_body: ImageGenerationRequest, request:
         )
 
 
-@router.get(
+@router.api_route(
     "/images/files/{filename}",
+    methods=["GET", "HEAD"],
     responses={
         200: {"description": "Cached generated image file"},
         400: {"description": "Invalid filename"},
@@ -114,6 +115,16 @@ async def get_cached_image(filename: str) -> FileResponse:
             detail="Image not found.",
         )
 
+    import time
+
+    if settings.image_cache_ttl_seconds > 0:
+        if (time.time() - file_path.stat().st_mtime) > settings.image_cache_ttl_seconds:
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Image has expired.",
+            )
+
     mime_type, _ = mimetypes.guess_type(str(file_path))
     if not mime_type:
         mime_type = "application/octet-stream"
@@ -121,5 +132,5 @@ async def get_cached_image(filename: str) -> FileResponse:
     return FileResponse(
         path=file_path,
         media_type=mime_type,
-        headers={"Cache-Control": "public, max-age=86400"},
+        headers={"Cache-Control": f"public, max-age={int(settings.image_cache_ttl_seconds)}"},
     )

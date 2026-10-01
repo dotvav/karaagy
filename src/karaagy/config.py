@@ -26,6 +26,7 @@ class KaraagySettings(BaseSettings):
     max_concurrent_sessions: int = 4
     antigravity_home: Path = Path.home() / ".gemini" / "antigravity-cli"
     image_cache_dir: Path = Path(tempfile.gettempdir()) / "karaagy_images_cache"
+    image_cache_ttl_seconds: float = 86400.0
 
     model_config = SettingsConfigDict(
         env_prefix="KARAAGY_",

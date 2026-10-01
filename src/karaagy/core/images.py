@@ -20,6 +20,49 @@ logger = logging.getLogger(__name__)
 SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
 
 
+def prune_expired_cached_images(max_age_seconds: float | None = None) -> int:
+    """Purge cached generated images older than max_age_seconds."""
+    max_age = max_age_seconds if max_age_seconds is not None else settings.image_cache_ttl_seconds
+    if max_age <= 0:
+        return 0
+
+    cache_dir = settings.image_cache_dir
+    if not cache_dir.exists() or not cache_dir.is_dir():
+        return 0
+
+    now = time.time()
+    pruned_count = 0
+    for file_path in cache_dir.iterdir():
+        if not file_path.is_file():
+            continue
+        try:
+            mtime = file_path.stat().st_mtime
+            if now - mtime > max_age:
+                file_path.unlink(missing_ok=True)
+                pruned_count += 1
+                logger.debug(
+                    "Pruned expired cached image: %s (age: %.1fs)", file_path.name, now - mtime
+                )
+        except Exception as e:
+            logger.warning("Failed to inspect/prune cached image %s: %s", file_path, e)
+
+    if pruned_count > 0:
+        logger.info("Pruned %d expired cached images from %s", pruned_count, cache_dir)
+    return pruned_count
+
+
+async def periodic_image_cache_cleanup_loop(interval_seconds: float = 3600.0) -> None:
+    """Background loop to periodically purge expired cached images."""
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+            prune_expired_cached_images()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning("Error in periodic image cache cleanup: %s", e)
+
+
 async def _generate_single_image(
     prompt_text: str,
     model: str,
@@ -122,6 +165,7 @@ async def generate_images(request: ImageGenerationRequest, base_url: str) -> Ima
     semaphore = get_concurrency_semaphore()
     image_objects: list[ImageObject] = []
     settings.image_cache_dir.mkdir(parents=True, exist_ok=True)
+    prune_expired_cached_images()
 
     for _ in range(n_count):
         if semaphore:
