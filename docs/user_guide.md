@@ -276,4 +276,6 @@ All settings can be customized via environment variables prefixed with `KARAAGY_
 | `KARAAGY_PUBLIC_BASE_URL` | Explicit public URL override for status page & snippets | `None` (auto-detected) |
 | `KARAAGY_IMAGE_CACHE_TTL_SECONDS` | Retention period in seconds before purging generated images from disk | `86400.0` (24h) |
 | `KARAAGY_IMAGE_CACHE_DIR` | Directory path for cached image files | `/tmp/karaagy_images_cache` |
+| `KARAAGY_THREADS_DIR` | Directory path for persisting OpenAI Assistants threads | `~/.gemini/antigravity-cli/karaagy_threads` |
+| `KARAAGY_THREAD_TTL_SECONDS` | Retention period in seconds for inactive threads | `604800.0` (7 days) |
 | `KARAAGY_DEBUG` | Enables verbose HTTP debug logging | `false` |

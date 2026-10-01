@@ -197,3 +197,15 @@ proc = await asyncio.create_subprocess_exec(
 )
 ```
 
+---
+
+## 🛠️ 17. OpenAI Assistants & Threads API State Management via `agy --conversation`
+- **Last Updated**: 2026-10-01T17:00:00Z
+- **The Issue**: Supporting OpenAI Assistants / Threads API (`/v1/threads`, `/v1/threads/{id}/messages`, `/v1/threads/{id}/runs`) on top of CLI invocations while preserving multi-turn conversational state and preventing disk accumulation over time.
+- **The Gotcha**: OpenAI Threads require stateful persistence of messages and runs across turns. Antigravity CLI natively supports `--conversation <id>` to resume an existing conversation thread. Karaagy maintains thread metadata in a local thread repository (`threads_dir`) mapping thread IDs to Antigravity `conversation_id`s, while implementing a background TTL pruning loop (`thread_ttl_seconds = 604800.0`, 7 days) to evict inactive threads from disk.
+- **Code / Solution**:
+```python
+# Pass conversation_id to agy to maintain conversational continuity
+cmd.extend(["--conversation", conversation_id])
+```
+
