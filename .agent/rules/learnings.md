@@ -167,3 +167,11 @@ COPY src/ ./src/
 RUN uv sync --frozen --no-dev
 ```
 
+---
+
+## 🛠️ 15. CI Action Runner Node 24 Execution & Deprecation Warnings
+- **Last Updated**: 2026-10-01T08:00:00Z
+- **The Issue**: GitHub Actions and Gitea Act emit deprecation warnings when actions (`actions/checkout@v4`, `setup-uv@v3`) run under the default Node 20 runtime.
+- **The Gotcha**: Python projects don't require Node.js for their application code; Node is only used by the CI runner engine to execute JavaScript action plugins.
+- **Code / Solution**: Set `ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: "node24"` in the top-level `env:` block of CI workflows to enforce execution under Node 24 and silence deprecation warnings.
+

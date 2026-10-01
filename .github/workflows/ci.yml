@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [main, dev]
 
+env:
+  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: "node24"
+
 jobs:
   test:
     name: Test & Static Analysis (Python ${{ matrix.python-version }})

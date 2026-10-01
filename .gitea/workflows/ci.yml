@@ -9,6 +9,7 @@ on:
 
 env:
   REGISTRY: gitea.ruk.info
+  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: "node24"
 
 jobs:
   check-backend:
