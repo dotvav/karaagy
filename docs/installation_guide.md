@@ -81,8 +81,6 @@ services:
       - /home/karaagy/.gemini:/home/karaagy/.gemini:rw
     labels:
       - "com.docker.compose.project=karaagy"
-      - "com.centurylinklabs.watchtower.enable=true"
-      - "com.centurylinklabs.watchtower.scope=standard"
 ```
 
 ### Launching the Container
