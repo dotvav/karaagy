@@ -82,3 +82,7 @@ ignore_errors = true
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:.*Using `httpx` with `starlette.testclient` is deprecated.*",
+    "ignore:.*starlette.testclient.*",
+]
