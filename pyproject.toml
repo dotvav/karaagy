@@ -35,10 +35,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/roukine/karaagy"
-Repository = "https://github.com/roukine/karaagy"
-Documentation = "https://github.com/roukine/karaagy#readme"
-Issues = "https://github.com/roukine/karaagy/issues"
+Homepage = "https://github.com/dotvav/karaagy"
+Repository = "https://github.com/dotvav/karaagy"
+Documentation = "https://github.com/dotvav/karaagy#readme"
+Issues = "https://github.com/dotvav/karaagy/issues"
 
 [project.scripts]
 karaagy = "karaagy.main:cli_entrypoint"

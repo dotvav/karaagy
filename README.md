@@ -5,8 +5,8 @@
 # Karaagy 🚀
 
 <p align="center">
-  <a href="https://github.com/roukine/karaagy/actions/workflows/ci.yml"><img src="https://github.com/roukine/karaagy/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
-  <a href="https://github.com/roukine/karaagy/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/dotvav/karaagy/actions/workflows/ci.yml"><img src="https://github.com/dotvav/karaagy/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
+  <a href="https://github.com/dotvav/karaagy/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <img src="https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg" alt="Python 3.12 | 3.13" />
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff" /></a>
   <img src="https://img.shields.io/badge/type%20checking-mypy%20strict-blue" alt="Mypy Strict" />

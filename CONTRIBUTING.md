@@ -15,7 +15,7 @@ Karaagy utilizes [`uv`](https://github.com/astral-sh/uv) for fast, deterministic
 
 ### 2. Clone & Install
 ```bash
-git clone https://github.com/roukine/karaagy.git
+git clone https://github.com/dotvav/karaagy.git
 cd karaagy
 uv sync
 ```

@@ -45,7 +45,7 @@ If you prefer running Karaagy directly on the host for development:
 ### 2. Install & Run
 ```bash
 # Clone the repository
-git clone https://github.com/roukine/karaagy.git
+git clone https://github.com/dotvav/karaagy.git
 cd karaagy
 
 # Install dependencies into virtualenv
@@ -64,7 +64,7 @@ uv run uvicorn karaagy.main:app --reload --port 8000
 ```yaml
 services:
   karaagy:
-    image: ghcr.io/roukine/karaagy:latest
+    image: ghcr.io/dotvav/karaagy:latest
     container_name: karaagy-api
     user: "8888:8888"
     restart: unless-stopped

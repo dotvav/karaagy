@@ -15,7 +15,7 @@ The Karaagy team takes security and privacy seriously. Because Karaagy interacts
 If you discover a security vulnerability:
 
 1. **Do NOT open a public GitHub issue.**
-2. Please privately disclose the vulnerability via [GitHub Security Advisories](https://github.com/roukine/karaagy/security/advisories/new) or by contacting the maintainer directly.
+2. Please privately disclose the vulnerability via [GitHub Security Advisories](https://github.com/dotvav/karaagy/security/advisories/new) or by contacting the maintainer directly.
 3. Provide:
    - A detailed description of the vulnerability.
    - Steps to reproduce or proof-of-concept payload.
