@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -54,7 +55,10 @@ class ThreadManager:
 
     @classmethod
     def _get_thread_file(cls, thread_id: str) -> Path:
-        return cls._get_storage_dir() / f"{thread_id}.json"
+        clean_id = Path(thread_id).name
+        if clean_id != thread_id or not re.match(r"^[a-zA-Z0-9_-]+$", thread_id):
+            raise ValueError(f"Invalid thread ID format: '{thread_id}'.")
+        return cls._get_storage_dir() / f"{clean_id}.json"
 
     @classmethod
     def _save_state(cls, state: ThreadState) -> None:
@@ -63,14 +67,17 @@ class ThreadManager:
 
     @classmethod
     def _load_state(cls, thread_id: str) -> ThreadState | None:
-        file_path = cls._get_thread_file(thread_id)
+        try:
+            file_path = cls._get_thread_file(thread_id)
+        except ValueError:
+            return None
         if not file_path.exists() or not file_path.is_file():
             return None
         try:
             data = json.loads(file_path.read_text(encoding="utf-8"))
-            return ThreadState.model_validate(data)
+            return ThreadState(**data)
         except Exception as e:
-            logger.error("Failed to load thread state for %s: %s", thread_id, e)
+            logger.warning("Failed to parse thread file for %s: %s", thread_id, e)
             return None
 
     @classmethod
@@ -330,7 +337,7 @@ class ThreadManager:
                 status="failed",
                 model=base_model,
                 instructions=run_req.instructions,
-                last_error=str(e),
+                last_error="Internal server error during run execution.",
             )
             return run_obj, None
         finally:

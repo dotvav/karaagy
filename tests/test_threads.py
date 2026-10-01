@@ -116,3 +116,27 @@ def test_delete_thread(client: TestClient) -> None:
     # Check 404
     get_res = client.get(f"/v1/threads/{thread_id}")
     assert get_res.status_code == 404
+
+
+def test_thread_path_traversal_protection(client: TestClient) -> None:
+    """Test that path traversal attempts in thread_id return 404 or error safely."""
+    res_get = client.get("/v1/threads/..%2F..%2Fetc%2Fpasswd")
+    assert res_get.status_code in {400, 404}
+
+    res_del = client.delete("/v1/threads/..%2F..%2Fetc%2Fpasswd")
+    assert res_del.status_code in {400, 404}
+
+
+@patch("karaagy.core.threads._execute_agy_json_internal", new_callable=AsyncMock)
+def test_thread_run_error_sanitization(mock_execute: AsyncMock, client: TestClient) -> None:
+    """Test that thread run failure sanitizes last_error without leaking sensitive internal details."""
+    mock_execute.side_effect = RuntimeError("Fatal DB crash at /etc/secret_token password=123")
+
+    t_res = client.post("/v1/threads", json={"messages": [{"role": "user", "content": "Test"}]})
+    thread_id = t_res.json()["id"]
+
+    run_res = client.post(f"/v1/threads/{thread_id}/runs", json={"model": "gemini-3.7-flash-low"})
+    assert run_res.status_code == 500
+    err_data = run_res.json()
+    assert "password=123" not in err_data["error"]["message"]
+    assert "Internal server error" in err_data["error"]["message"]
