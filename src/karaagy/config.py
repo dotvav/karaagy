@@ -1,6 +1,7 @@
 """Application settings and configuration for Karaagy."""
 
 import shutil
+import tempfile
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,6 +25,7 @@ class KaraagySettings(BaseSettings):
     initial_backoff: float = 2.0
     max_concurrent_sessions: int = 4
     antigravity_home: Path = Path.home() / ".gemini" / "antigravity-cli"
+    image_cache_dir: Path = Path(tempfile.gettempdir()) / "karaagy_images_cache"
 
     model_config = SettingsConfigDict(
         env_prefix="KARAAGY_",

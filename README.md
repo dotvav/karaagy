@@ -21,7 +21,7 @@
 
 ## 🌟 Key Features
 
-- **OpenAI Standard Endpoints**: Supports `GET /v1/models` and `POST /v1/chat/completions`.
+- **OpenAI Standard Endpoints**: Supports `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/images/generations`.
 - **Real-Time Streaming**: Full Server-Sent Events (SSE) streaming (`stream: true`) with token deltas.
 - **Interactive Web Status Dashboard**: Self-contained, responsive dashboard on `GET /` with live `/usage` quota tracking, concurrency metrics, sanitized environment inspector, and model alias mappings.
 - **Dynamic Model Discovery & Alias Routing**: Discovers available models from `agy models` with transparent mapping for common aliases (`gpt-4o`, `gpt-3.5-turbo`, `claude-3-5-sonnet`, `gemini-flash`).
@@ -117,6 +117,7 @@ client = OpenAI(
     api_key="none",  # Auth not required
 )
 
+# Chat completions
 response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
@@ -130,10 +131,31 @@ for chunk in response:
     if content:
         print(content, end="", flush=True)
 print()
+
+# Image generation
+image_res = client.images.generate(
+    prompt="A cute kitten-shaped cactus in a pot",
+    n=1,
+    size="1024x1024",
+    response_format="url",
+)
+print("Image URL:", image_res.data[0].url)
+```
+
+### Image Generation via cURL (`POST /v1/images/generations`)
+```bash
+curl -X POST http://localhost:8000/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A cute kitten-shaped cactus in a terracotta pot",
+    "n": 1,
+    "size": "1024x1024",
+    "response_format": "url"
+  }'
 ```
 
 ---
- 
+
 ## 🖥️ Interactive Web Status Dashboard
 
 Access `http://localhost:8000/` in any browser to view the diagnostic dashboard:

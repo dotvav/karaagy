@@ -175,3 +175,25 @@ RUN uv sync --frozen --no-dev
 - **The Gotcha**: Python projects don't require Node.js for their application code; Node is only used by the CI runner engine to execute JavaScript action plugins.
 - **Code / Solution**: Set `ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: "node24"` in the top-level `env:` block of CI workflows to enforce execution under Node 24 and silence deprecation warnings.
 
+---
+
+## 🛠️ 16. OpenAI Image Generation (`POST /v1/images/generations`) via Isolated `agy` Subprocesses
+- **Last Updated**: 2026-10-01T08:45:00Z
+- **The Issue**: Supporting standard OpenAI image generation requests (`POST /v1/images/generations`) using Antigravity CLI without native raster diffusion APIs.
+- **The Gotcha**: `agy` CLI invokes its internal `generate_image` tool when given `--dangerously-skip-permissions` in non-interactive print mode (`-p`). To prevent file collisions and extract generated artifacts safely, the subprocess must run within an isolated temporary directory (`tempfile.TemporaryDirectory`), scan for output raster formats (`.png`, `.jpg`, `.jpeg`, `.webp`), and return either Base64 (`b64_json`) or persist to a designated cache served via `GET /v1/images/files/{filename}` with strict path traversal validation.
+- **Code / Solution**:
+```python
+# Execute in isolated temporary directory and retrieve the generated image
+proc = await asyncio.create_subprocess_exec(
+    settings.resolve_agy_bin(),
+    "--dangerously-skip-permissions",
+    "--model",
+    model,
+    "-p",
+    f"Generate an image matching this request: {prompt}. Save output file in current directory.",
+    cwd=str(temp_dir),
+    stdout=asyncio.subprocess.PIPE,
+    stderr=asyncio.subprocess.PIPE,
+)
+```
+

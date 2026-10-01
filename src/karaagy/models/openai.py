@@ -121,3 +121,33 @@ class ErrorResponse(BaseModel):
     """OpenAI error response envelope."""
 
     error: ErrorDetail
+
+
+class ImageGenerationRequest(BaseModel):
+    """OpenAI standard image generation request schema."""
+
+    model_config = {"extra": "allow"}
+
+    prompt: str
+    model: str | None = None
+    n: int | None = 1
+    quality: str | None = "standard"
+    response_format: Literal["url", "b64_json"] | str | None = "url"
+    size: str | None = "1024x1024"
+    style: str | None = None
+    user: str | None = None
+
+
+class ImageObject(BaseModel):
+    """Single generated image data representation."""
+
+    b64_json: str | None = None
+    url: str | None = None
+    revised_prompt: str | None = None
+
+
+class ImagesResponse(BaseModel):
+    """OpenAI standard images response envelope."""
+
+    created: int = Field(default_factory=lambda: int(time.time()))
+    data: list[ImageObject]
