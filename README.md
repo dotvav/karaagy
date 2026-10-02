@@ -140,6 +140,23 @@ image_res = client.images.generate(
     response_format="url",
 )
 print("Image URL:", image_res.data[0].url)
+
+# Threads & Multi-Turn Runs (Assistants API)
+thread = client.beta.threads.create(
+    messages=[
+        {"role": "user", "content": "My name is Vincent."},
+    ]
+)
+run = client.beta.threads.runs.create(
+    thread_id=thread.id,
+    model="gpt-4o",
+)
+messages = client.beta.threads.messages.list(thread_id=thread.id)
+for msg in messages.data:
+    content_text = (
+        msg.content[0].text.value if hasattr(msg.content[0], "text") else str(msg.content[0])
+    )
+    print(f"{msg.role}: {content_text}")
 ```
 
 ### Image Generation via cURL (`POST /v1/images/generations`)
@@ -152,6 +169,31 @@ curl -X POST http://localhost:8000/v1/images/generations \
     "size": "1024x1024",
     "response_format": "url"
   }'
+```
+
+### Threads & Multi-Turn Runs (`POST /v1/threads`)
+```bash
+# 1. Create a thread with initial user message
+THREAD_ID=$(curl -s -X POST http://localhost:8000/v1/threads \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Remember the keyword: Pineapple."}]}' | jq -r .id)
+
+# 2. Execute a run on the thread
+curl -s -X POST "http://localhost:8000/v1/threads/${THREAD_ID}/runs" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "instructions": "You are a concise assistant."}'
+
+# 3. Ask a follow-up question in the same persistent thread
+curl -s -X POST "http://localhost:8000/v1/threads/${THREAD_ID}/messages" \
+  -H "Content-Type: application/json" \
+  -d '{"role": "user", "content": "What was the secret keyword?"}'
+
+curl -s -X POST "http://localhost:8000/v1/threads/${THREAD_ID}/runs" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o"}'
+
+# 4. List all messages in the thread
+curl -s "http://localhost:8000/v1/threads/${THREAD_ID}/messages?order=asc"
 ```
 
 ---

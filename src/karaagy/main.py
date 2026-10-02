@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from karaagy import __version__
 from karaagy.api.router import api_router
 from karaagy.config import settings
 from karaagy.core.registry import ModelRegistry
@@ -22,7 +23,9 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager to warm up caches and log startup info."""
-    logger.info("Starting %s on %s:%d", settings.app_name, settings.host, settings.port)
+    logger.info(
+        "Starting %s v%s on %s:%d", settings.app_name, __version__, settings.host, settings.port
+    )
     # Warm up model registry and quota caches in background
     asyncio.create_task(ModelRegistry.get_available_models())
     from karaagy.core.diagnostics import DiagnosticsManager
@@ -51,7 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title=settings.app_name,
     description="OpenAI-compatible REST and SSE API wrapper for Google Antigravity CLI",
-    version="0.1.0",
+    version=__version__,
     debug=settings.debug,
     lifespan=lifespan,
 )

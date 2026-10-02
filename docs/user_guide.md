@@ -261,6 +261,77 @@ print(response.choices[0].message.content)
 
 ---
 
+### 6. Image Generation (`/v1/images/generations`)
+
+Generate raster images using Antigravity AI generation with full OpenAI compatibility:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="none")
+
+# Generate image URL
+image_res = client.images.generate(
+    prompt="A cozy cabin in the snowy mountains at twilight",
+    n=1,
+    size="1024x1024",
+    response_format="url",
+)
+
+print("Generated Image URL:", image_res.data[0].url)
+```
+
+Generated image files are stored locally in `KARAAGY_IMAGE_CACHE_DIR` and automatically purged after `KARAAGY_IMAGE_CACHE_TTL_SECONDS` (default 24h).
+
+---
+
+### 7. OpenAI Assistants & Threads API (`/v1/threads`)
+
+Karaagy provides stateful multi-turn conversational persistence using OpenAI Assistants / Threads endpoints, backed by Antigravity session IDs:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="none")
+
+# 1. Create thread with initial context
+thread = client.beta.threads.create(
+    messages=[
+        {"role": "user", "content": "I am working on Project Apollo."},
+    ]
+)
+
+# 2. Run thread
+run = client.beta.threads.runs.create(
+    thread_id=thread.id,
+    model="gpt-4o",
+    instructions="You are a senior project management assistant.",
+)
+
+# 3. Add follow-up message to the same thread
+client.beta.threads.messages.create(
+    thread_id=thread.id,
+    role="user",
+    content="What project am I working on?",
+)
+
+# 4. Run follow-up turn
+run2 = client.beta.threads.runs.create(
+    thread_id=thread.id,
+    model="gpt-4o",
+)
+
+# 5. List all messages in chronological order
+messages = client.beta.threads.messages.list(thread_id=thread.id, order="asc")
+for msg in messages.data:
+    text = msg.content[0].text.value if hasattr(msg.content[0], "text") else str(msg.content[0])
+    print(f"[{msg.role.upper()}]: {text}")
+```
+
+Inactive threads are automatically pruned from disk after `KARAAGY_THREAD_TTL_SECONDS` (default 7 days).
+
+---
+
 ## ⚙️ Configuration Reference
 
 All settings can be customized via environment variables prefixed with `KARAAGY_`:
