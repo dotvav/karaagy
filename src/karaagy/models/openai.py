@@ -64,6 +64,7 @@ class ChatCompletionResponse(BaseModel):
     model: str
     choices: list[ChatCompletionChoice]
     usage: UsageInfo | None = None
+    conversation_id: str | None = None
 
 
 class ChatCompletionChunkDelta(BaseModel):

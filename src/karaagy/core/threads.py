@@ -39,7 +39,7 @@ class ThreadState(BaseModel):
     id: str
     created_at: int = Field(default_factory=lambda: int(time.time()))
     last_active_at: int = Field(default_factory=lambda: int(time.time()))
-    conversation_id: str
+    conversation_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     messages: list[ThreadMessage] = Field(default_factory=list)
 
@@ -88,7 +88,7 @@ class ThreadManager:
     ) -> ThreadObject:
         """Create a new persistent thread and associated AGY conversation."""
         thread_id = f"thread_{uuid.uuid4().hex[:20]}"
-        convo_id = str(uuid.uuid4())
+        convo_id: str | None = str(metadata["conversation_id"]) if (metadata and "conversation_id" in metadata) else None
         state = ThreadState(
             id=thread_id,
             conversation_id=convo_id,
@@ -117,7 +117,7 @@ class ThreadManager:
                 state.messages.append(thread_msg)
 
         cls._save_state(state)
-        logger.info("Created thread %s with AGY conversation %s", thread_id, convo_id)
+        logger.info("Created thread %s (initial convo_id=%s)", thread_id, convo_id)
         return ThreadObject(
             id=state.id,
             created_at=state.created_at,
@@ -145,7 +145,8 @@ class ThreadManager:
         if not state:
             return False
 
-        prune_conversation_storage(state.conversation_id)
+        if state.conversation_id:
+            prune_conversation_storage(state.conversation_id)
         file_path = cls._get_thread_file(thread_id)
         try:
             file_path.unlink(missing_ok=True)
@@ -156,6 +157,7 @@ class ThreadManager:
         except Exception as e:
             logger.error("Failed to delete thread file %s: %s", file_path, e)
             return False
+
 
     @classmethod
     def add_message(cls, thread_id: str, req: CreateThreadMessageRequest) -> ThreadMessage | None:
@@ -305,6 +307,11 @@ class ThreadManager:
                 conversation_id=state.conversation_id,
             )
 
+            # Capture and persist actual AGY conversation ID for future turns
+            if completion.conversation_id and completion.conversation_id != state.conversation_id:
+                state.conversation_id = completion.conversation_id
+                cls._save_state(state)
+
             assistant_text = ""
             if completion.choices and completion.choices[0].message:
                 raw_c = completion.choices[0].message.content
@@ -364,6 +371,7 @@ class ThreadManager:
             prompt_text = "Continue."
 
         accumulated_text: list[str] = []
+        discovered_convo_id: str | None = state.conversation_id
 
         try:
             logger.info(
@@ -385,6 +393,8 @@ class ThreadManager:
                     try:
                         raw_json = chunk_str[6:].strip()
                         cdata = json.loads(raw_json)
+                        if "conversation_id" in cdata and cdata["conversation_id"]:
+                            discovered_convo_id = cdata["conversation_id"]
                         choices = cdata.get("choices", [])
                         if choices and "delta" in choices[0]:
                             delta_content = choices[0]["delta"].get("content")
@@ -403,8 +413,14 @@ class ThreadManager:
                 )
                 cls.add_message(thread_id, asst_msg_req)
 
+            # Persist actual AGY conversation ID
+            if discovered_convo_id and discovered_convo_id != state.conversation_id:
+                state.conversation_id = discovered_convo_id
+                cls._save_state(state)
+
         finally:
             cleanup_temp_images(tracked_images)
+
 
     @classmethod
     def prune_expired_threads(cls) -> int:

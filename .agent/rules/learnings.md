@@ -199,13 +199,22 @@ proc = await asyncio.create_subprocess_exec(
 
 ---
 
-## 🛠️ 17. OpenAI Assistants & Threads API State Management via `agy --conversation`
-- **Last Updated**: 2026-10-01T17:00:00Z
+## 🛠️ 17. OpenAI Assistants & Threads API State Management & AGY Conversation ID Capture
+- **Last Updated**: 2026-10-02T06:19:00Z
 - **The Issue**: Supporting OpenAI Assistants / Threads API (`/v1/threads`, `/v1/threads/{id}/messages`, `/v1/threads/{id}/runs`) on top of CLI invocations while preserving multi-turn conversational state and preventing disk accumulation over time.
-- **The Gotcha**: OpenAI Threads require stateful persistence of messages and runs across turns. Antigravity CLI natively supports `--conversation <id>` to resume an existing conversation thread. Karaagy maintains thread metadata in a local thread repository (`threads_dir`) mapping thread IDs to Antigravity `conversation_id`s, while implementing a background TTL pruning loop (`thread_ttl_seconds = 604800.0`, 7 days) to evict inactive threads from disk.
+- **The Gotcha**: Passing a randomly generated UUID to `agy --conversation <random_uuid>` before the conversation exists causes `agy` to emit `warning: conversation "<random_uuid>" not found`, discard the argument, and generate a new untracked session UUID. If the server does not capture the real `conversation_id` returned in the JSON/SSE response on the first turn, subsequent turns continue passing the nonexistent UUID, resulting in complete memory loss across turns.
 - **Code / Solution**:
+  1. Initialize `ThreadState.conversation_id = None`.
+  2. Execute the initial run without `--conversation` (or with existing valid ID).
+  3. Parse `completion.conversation_id` or SSE `cdata["conversation_id"]` from the execution result and persist it to `state.conversation_id` for all subsequent turns.
 ```python
-# Pass conversation_id to agy to maintain conversational continuity
-cmd.extend(["--conversation", conversation_id])
+# Pass conversation_id to agy only when already created/discovered
+if conversation_id:
+    cmd.extend(["--conversation", conversation_id])
+
+# Capture returned conversation ID from response and persist to thread state
+if completion.conversation_id and completion.conversation_id != state.conversation_id:
+    state.conversation_id = completion.conversation_id
+    cls._save_state(state)
 ```
 

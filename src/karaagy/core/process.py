@@ -179,6 +179,7 @@ async def _execute_agy_json_internal(
             return ChatCompletionResponse(
                 id=completion_id,
                 model=model,
+                conversation_id=parsed.conversation_id or conversation_id,
                 choices=[
                     ChatCompletionChoice(
                         index=0,
@@ -188,6 +189,7 @@ async def _execute_agy_json_internal(
                 ],
                 usage=usage,
             )
+
 
         except Exception as e:
             last_error = str(e)
