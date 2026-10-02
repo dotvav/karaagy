@@ -190,7 +190,6 @@ async def _execute_agy_json_internal(
                 usage=usage,
             )
 
-
         except Exception as e:
             last_error = str(e)
             if attempt < settings.max_retries and is_retryable_agy_error(last_error):

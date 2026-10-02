@@ -88,7 +88,11 @@ class ThreadManager:
     ) -> ThreadObject:
         """Create a new persistent thread and associated AGY conversation."""
         thread_id = f"thread_{uuid.uuid4().hex[:20]}"
-        convo_id: str | None = str(metadata["conversation_id"]) if (metadata and "conversation_id" in metadata) else None
+        convo_id: str | None = (
+            str(metadata["conversation_id"])
+            if (metadata and "conversation_id" in metadata)
+            else None
+        )
         state = ThreadState(
             id=thread_id,
             conversation_id=convo_id,
@@ -157,7 +161,6 @@ class ThreadManager:
         except Exception as e:
             logger.error("Failed to delete thread file %s: %s", file_path, e)
             return False
-
 
     @classmethod
     def add_message(cls, thread_id: str, req: CreateThreadMessageRequest) -> ThreadMessage | None:
@@ -420,7 +423,6 @@ class ThreadManager:
 
         finally:
             cleanup_temp_images(tracked_images)
-
 
     @classmethod
     def prune_expired_threads(cls) -> int:
