@@ -332,6 +332,41 @@ Inactive threads are automatically pruned from disk after `KARAAGY_THREAD_TTL_SE
 
 ---
 
+### 8. Structured Outputs (`response_format`: `json_schema` & `json_object`)
+
+Karaagy supports OpenAI `response_format` for structured JSON extraction (`type: "json_schema"` and `type: "json_object"`), compatible with SDKs such as the Vercel AI SDK (`@ai-sdk/openai-compatible` with `Output.object({ schema })`), LiteLLM, and the OpenAI Python/TypeScript SDKs. When active, Karaagy automatically injects the JSON Schema and anti-tool execution rules into system instructions and strips any wrapping Markdown code fences (```` ```json ... ``` ````) before returning the payload:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="none")
+
+response = client.chat.completions.create(
+    model="gemini-3.8-flash-high",
+    messages=[{"role": "user", "content": "Extract nutrition info for 100g of oats."}],
+    response_format={
+        "type": "json_schema",
+        "json_schema": {
+            "name": "nutrition_facts",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "food": {"type": "string"},
+                    "calories_kcal": {"type": "number"},
+                    "protein_g": {"type": "number"},
+                },
+                "required": ["food", "calories_kcal", "protein_g"],
+            },
+        },
+    },
+)
+
+print(response.choices[0].message.content)
+```
+
+---
+
 ## ⚙️ Configuration Reference
 
 All settings can be customized via environment variables prefixed with `KARAAGY_`:
