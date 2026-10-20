@@ -11,11 +11,13 @@ from karaagy.core.diagnostics import DiagnosticsManager
 from karaagy.core.process import execute_agy_json, execute_agy_stream
 from karaagy.core.prompt import build_agy_prompt, cleanup_temp_images
 from karaagy.core.registry import ModelRegistry
+from karaagy.core.sanitization import sanitize_agy_response
 from karaagy.models.openai import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ErrorDetail,
     ErrorResponse,
+    is_json_response_format,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,12 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
 
     base_model, effort = ModelRegistry.resolve_model_and_effort(request.model, request.effort)
     tracked_images: list[Path] = []
-    prompt_text = build_agy_prompt(request.messages, tracked_files=tracked_images)
+    is_json = is_json_response_format(request.response_format)
+    prompt_text = build_agy_prompt(
+        request.messages,
+        tracked_files=tracked_images,
+        response_format=request.response_format,
+    )
 
     if not prompt_text:
         cleanup_temp_images(tracked_images)
@@ -79,6 +86,7 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
                 effort=effort,
                 conversation_id=request.conversation_id,
                 temp_files=tracked_images,
+                expect_json=is_json,
             )
             return StreamingResponse(
                 stream_generator,
@@ -95,7 +103,18 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Any:
             model=base_model,
             effort=effort,
             conversation_id=request.conversation_id,
+            expect_json=is_json,
         )
+        if (
+            is_json
+            and response.choices
+            and response.choices[0].message
+            and isinstance(response.choices[0].message.content, str)
+        ):
+            response.choices[0].message.content = sanitize_agy_response(
+                response.choices[0].message.content,
+                expect_json=True,
+            )
         prompt_tokens = response.usage.prompt_tokens if response.usage else 0
         completion_tokens = response.usage.completion_tokens if response.usage else 0
         DiagnosticsManager.record_request_completion(

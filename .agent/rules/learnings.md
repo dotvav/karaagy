@@ -218,3 +218,30 @@ if completion.conversation_id and completion.conversation_id != state.conversati
     cls._save_state(state)
 ```
 
+---
+
+## 🛠️ 18. OpenAI `response_format` (`json_schema` / `json_object`) Tool Loop Prevention & Greedy Fence Stripping
+- **Last Updated**: 2026-10-20T16:12:00Z
+- **The Issue**: When OpenAI-compatible SDKs (such as Vercel AI SDK `@ai-sdk/openai-compatible` with `Output.object({ schema })`) call `POST /v1/chat/completions` with `response_format` (`type: "json_schema"` or `"json_object"`), two failures occur if `response_format` is ignored:
+  1. When the user prompt mentions "matching the provided schema" without embedding the schema inside `messages`, `agy` invokes filesystem tools (`run_command`, `grep`, `read_file`) to search `/app` for schema definitions, causing >5 min timeouts and >240k token consumption.
+  2. When `agy` wraps its JSON output in Markdown code fences (```` ```json\n{...}\n``` ````), client-side `JSON.parse()` fails with `SyntaxError: Unexpected token '`'` (`AI_NoObjectGeneratedError`).
+- **The Gotcha**:
+  1. `build_agy_prompt` normally short-circuits single-user messages (`len(messages) == 1 and messages[0].role == "user"`), bypassing `### SYSTEM INSTRUCTIONS:`. This short-circuit must be disabled when `is_json_response_format(response_format)` is `True`.
+  2. Stripping outer Markdown code fences (`strip_json_fences`) must use an anchored greedy regex (`^```(?:json|JSON)?\s*\n?([\s\S]*)\n?\s*```$`) validated via `json.loads()` before falling back to non-greedy embedded fence extraction, so nested triple backticks inside JSON string values (e.g. `{"snippet": "```python\nprint(1)\n```"}`) are not truncated.
+- **Code / Solution**:
+```python
+# 1. Bypass single-user short-circuit when JSON response_format is active
+is_json = is_json_response_format(response_format)
+if not is_json and len(messages) == 1 and messages[0].role == "user":
+    return extract_message_text(messages[0].content, tracked_files=tracked_files)
+
+# 2. Anchored greedy outer fence match preserving inner code blocks
+outer_fence_pattern = re.compile(r"^```(?:json|JSON)?\s*\n?([\s\S]*)\n?\s*```$", re.DOTALL)
+outer_match = outer_fence_pattern.match(cleaned)
+if outer_match:
+    inner = outer_match.group(1).strip()
+    json.loads(inner)
+    return inner
+```
+
+

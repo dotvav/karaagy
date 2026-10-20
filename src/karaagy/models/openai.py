@@ -16,6 +16,26 @@ class ChatCompletionMessage(BaseModel):
     name: str | None = None
 
 
+class ResponseFormatJsonSchema(BaseModel):
+    """OpenAI JSON Schema specification."""
+
+    model_config = {"extra": "allow", "populate_by_name": True}
+
+    name: str = "response_schema"
+    description: str | None = None
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema")
+    strict: bool | None = None
+
+
+class ResponseFormat(BaseModel):
+    """OpenAI response_format payload."""
+
+    model_config = {"extra": "allow"}
+
+    type: Literal["text", "json_object", "json_schema"] = "text"
+    json_schema: ResponseFormatJsonSchema | dict[str, Any] | None = None
+
+
 class ChatCompletionRequest(BaseModel):
     """OpenAI chat completion request schema with Antigravity extensions."""
 
@@ -32,11 +52,53 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
     user: str | None = None
-    response_format: dict[str, Any] | None = None
+    response_format: ResponseFormat | dict[str, Any] | None = None
 
     # Antigravity extensions
     effort: Literal["low", "medium", "high"] | None = None
     conversation_id: str | None = None
+
+
+def is_json_response_format(response_format: ResponseFormat | dict[str, Any] | None) -> bool:
+    """Return True if response_format requires JSON output (json_object or json_schema)."""
+    if not response_format:
+        return False
+    if isinstance(response_format, ResponseFormat):
+        return response_format.type in ("json_object", "json_schema")
+    if isinstance(response_format, dict):
+        return response_format.get("type") in ("json_object", "json_schema")
+    return False
+
+
+def extract_json_schema(
+    response_format: ResponseFormat | dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Extract the raw JSON Schema dict from response_format."""
+    if not response_format:
+        return None
+
+    if isinstance(response_format, ResponseFormat):
+        if response_format.type != "json_schema" or response_format.json_schema is None:
+            return None
+        if isinstance(response_format.json_schema, ResponseFormatJsonSchema):
+            if response_format.json_schema.schema_ is not None:
+                return response_format.json_schema.schema_
+            if response_format.json_schema.model_extra:
+                return response_format.json_schema.model_extra
+            return None
+        if isinstance(response_format.json_schema, dict):
+            return response_format.json_schema.get("schema") or response_format.json_schema
+
+    if isinstance(response_format, dict):
+        if response_format.get("type") != "json_schema":
+            return None
+        if "json_schema" in response_format and isinstance(response_format["json_schema"], dict):
+            js = response_format["json_schema"]
+            return js.get("schema") or js
+        if "schema" in response_format and isinstance(response_format["schema"], dict):
+            return response_format["schema"]
+
+    return None
 
 
 class UsageInfo(BaseModel):

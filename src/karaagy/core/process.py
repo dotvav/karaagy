@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 import shutil
 import uuid
 from collections.abc import AsyncGenerator
@@ -74,6 +75,7 @@ async def _execute_agy_json_internal(
     effort: str | None = None,
     conversation_id: str | None = None,
     cwd: Path | None = None,
+    expect_json: bool = False,
 ) -> ChatCompletionResponse:
     """Execute non-streaming completion via `agy --output-format json`."""
     agy_bin = settings.resolve_agy_bin()
@@ -150,7 +152,7 @@ async def _execute_agy_json_internal(
                     continue
                 raise RuntimeError(f"AGY CLI error: {err_msg}")
 
-            clean_text = sanitize_agy_response(parsed.response)
+            clean_text = sanitize_agy_response(parsed.response, expect_json=expect_json)
             if not clean_text:
                 last_error = "AGY returned empty text response"
                 logger.warning(
@@ -209,6 +211,7 @@ async def execute_agy_json(
     effort: str | None = None,
     conversation_id: str | None = None,
     cwd: Path | None = None,
+    expect_json: bool = False,
 ) -> ChatCompletionResponse:
     """Execute non-streaming completion guarded by concurrency semaphore."""
     sem = get_concurrency_semaphore()
@@ -220,6 +223,7 @@ async def execute_agy_json(
                 effort=effort,
                 conversation_id=conversation_id,
                 cwd=cwd,
+                expect_json=expect_json,
             )
     return await _execute_agy_json_internal(
         prompt=prompt,
@@ -227,6 +231,7 @@ async def execute_agy_json(
         effort=effort,
         conversation_id=conversation_id,
         cwd=cwd,
+        expect_json=expect_json,
     )
 
 
@@ -237,6 +242,7 @@ async def _execute_agy_stream_internal(
     conversation_id: str | None = None,
     cwd: Path | None = None,
     temp_files: list[Path] | None = None,
+    expect_json: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Execute streaming completion via `agy --output-format stream-json` and yield SSE events."""
     agy_bin = settings.resolve_agy_bin()
@@ -261,6 +267,7 @@ async def _execute_agy_stream_internal(
 
     logger.info("Running AGY streaming (model=%s)", model)
     discovered_convo_id: str | None = conversation_id
+    is_first_content_chunk = True
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -313,10 +320,20 @@ async def _execute_agy_stream_internal(
                     delta_text = stream_event.step_update.text_delta
                     if delta_text:
                         clean_delta = (
-                            sanitize_agy_response(delta_text)
+                            sanitize_agy_response(delta_text, expect_json=expect_json)
                             if "**Notification" in delta_text
                             else delta_text
                         )
+                        if expect_json and is_first_content_chunk:
+                            clean_delta = re.sub(r"^```(?:json|JSON)?\s*\n?", "", clean_delta)
+                            if clean_delta.strip():
+                                is_first_content_chunk = False
+                        if expect_json:
+                            clean_delta = re.sub(r"\n?```\s*$", "", clean_delta)
+
+                        if not clean_delta and expect_json:
+                            continue
+
                         chunk = ChatCompletionChunk(
                             id=completion_id,
                             model=model,
@@ -381,6 +398,7 @@ async def execute_agy_stream(
     conversation_id: str | None = None,
     cwd: Path | None = None,
     temp_files: list[Path] | None = None,
+    expect_json: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Execute streaming completion guarded by concurrency semaphore."""
     sem = get_concurrency_semaphore()
@@ -393,6 +411,7 @@ async def execute_agy_stream(
                 conversation_id=conversation_id,
                 cwd=cwd,
                 temp_files=temp_files,
+                expect_json=expect_json,
             ):
                 yield chunk
     else:
@@ -403,5 +422,6 @@ async def execute_agy_stream(
             conversation_id=conversation_id,
             cwd=cwd,
             temp_files=temp_files,
+            expect_json=expect_json,
         ):
             yield chunk

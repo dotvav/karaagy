@@ -2,7 +2,7 @@
 
 **Issue ID**: #3  
 **Target File**: [`docs/plans/plan_3.md`](file:///home/roukine/workspaces/karaagy/docs/plans/plan_3.md)  
-**Status**: DRAFT  
+**Status**: COMPLETED  
 **Author**: Antigravity High-Reasoning Planning Subagent  
 **Date**: 2026-10-20  
 
@@ -168,7 +168,9 @@ def is_json_response_format(response_format: ResponseFormat | dict[str, Any] | N
     return False
 
 
-def extract_json_schema(response_format: ResponseFormat | dict[str, Any] | None) -> dict[str, Any] | None:
+def extract_json_schema(
+    response_format: ResponseFormat | dict[str, Any] | None,
+) -> dict[str, Any] | None:
     """Extract the raw JSON Schema dict from response_format."""
     if not response_format:
         return None
@@ -247,7 +249,9 @@ def build_agy_prompt(
                 f"The JSON output MUST strictly conform to the following JSON Schema:\n{schema_str}"
             )
         else:
-            json_constraints.append("The JSON output MUST be a valid, well-formed JSON object or array.")
+            json_constraints.append(
+                "The JSON output MUST be a valid, well-formed JSON object or array."
+            )
 
         system_parts.append("\n".join(json_constraints))
 
@@ -425,29 +429,29 @@ if stream_event.event == "step_update" and stream_event.step_update:
 
 ## 5. Step-by-Step Implementation Tasks
 
-- [ ] **Task 1: Schemas & Helpers** (`src/karaagy/models/openai.py`)
-  - [ ] Add `ResponseFormatJsonSchema` and `ResponseFormat` models.
-  - [ ] Update `ChatCompletionRequest.response_format` type annotation.
-  - [ ] Implement `is_json_response_format()` and `extract_json_schema()`.
-- [ ] **Task 2: Prompt Builder Enhancement** (`src/karaagy/core/prompt.py`)
-  - [ ] Add `response_format` parameter to `build_agy_prompt`.
-  - [ ] Update single-user short-circuit condition to exclude requests where `is_json` is True.
-  - [ ] Inject strict tool restriction policy and schema into system instructions.
-- [ ] **Task 3: Markdown Code Fence Stripping** (`src/karaagy/core/sanitization.py`)
-  - [ ] Implement `strip_json_fences(text: str) -> str`.
-  - [ ] Update `sanitize_agy_response()` signature with `expect_json: bool = False`.
-- [ ] **Task 4: Process Execution & API Route Plumbing** (`src/karaagy/core/process.py`, `src/karaagy/api/routes_chat.py`)
-  - [ ] Plumb `expect_json` parameter through `execute_agy_json` and `execute_agy_stream`.
-  - [ ] Wire `request.response_format` in `routes_chat.py` into prompt builder and execution engine.
-- [ ] **Task 5: Unit & Integration Testing** (`tests/`)
-  - [ ] Expand `tests/test_prompt_builder.py` with single/multi-turn and multimodal `response_format` tests.
-  - [ ] Expand `tests/test_sanitization.py` with fence stripping, nested backticks, and conversational prose tests.
-  - [ ] Expand `tests/test_chat_completions_sync.py` with Vercel AI SDK style payloads and fence stripping verification.
-  - [ ] Expand `tests/test_chat_completions_stream.py` with streaming `response_format` tests.
-- [ ] **Task 6: Handoff Verification**
-  - [ ] Run `uv run ruff check` and `uv run ruff format --check`.
-  - [ ] Run `uv run mypy .`.
-  - [ ] Run `uv run pytest`.
+- [x] **Task 1: Schemas & Helpers** (`src/karaagy/models/openai.py`)
+  - [x] Add `ResponseFormatJsonSchema` and `ResponseFormat` models.
+  - [x] Update `ChatCompletionRequest.response_format` type annotation.
+  - [x] Implement `is_json_response_format()` and `extract_json_schema()`.
+- [x] **Task 2: Prompt Builder Enhancement** (`src/karaagy/core/prompt.py`)
+  - [x] Add `response_format` parameter to `build_agy_prompt`.
+  - [x] Update single-user short-circuit condition to exclude requests where `is_json` is True.
+  - [x] Inject strict tool restriction policy and schema into system instructions.
+- [x] **Task 3: Markdown Code Fence Stripping** (`src/karaagy/core/sanitization.py`)
+  - [x] Implement `strip_json_fences(text: str) -> str`.
+  - [x] Update `sanitize_agy_response()` signature with `expect_json: bool = False`.
+- [x] **Task 4: Process Execution & API Route Plumbing** (`src/karaagy/core/process.py`, `src/karaagy/api/routes_chat.py`)
+  - [x] Plumb `expect_json` parameter through `execute_agy_json` and `execute_agy_stream`.
+  - [x] Wire `request.response_format` in `routes_chat.py` into prompt builder and execution engine.
+- [x] **Task 5: Unit & Integration Testing** (`tests/`)
+  - [x] Expand `tests/test_prompt_builder.py` with single/multi-turn and multimodal `response_format` tests.
+  - [x] Expand `tests/test_sanitization.py` with fence stripping, nested backticks, and conversational prose tests.
+  - [x] Expand `tests/test_chat_completions_sync.py` with Vercel AI SDK style payloads and fence stripping verification.
+  - [x] Expand `tests/test_chat_completions_stream.py` with streaming `response_format` tests.
+- [x] **Task 6: Handoff Verification**
+  - [x] Run `uv run ruff check` and `uv run ruff format --check`.
+  - [x] Run `uv run mypy .`.
+  - [x] Run `uv run pytest`.
 
 ---
 
