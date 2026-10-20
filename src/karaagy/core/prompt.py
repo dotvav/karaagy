@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 import re
 import tempfile
@@ -6,7 +7,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from karaagy.models.openai import ChatCompletionMessage
+from karaagy.models.openai import (
+    ChatCompletionMessage,
+    ResponseFormat,
+    extract_json_schema,
+    is_json_response_format,
+)
 
 logger = logging.getLogger(__name__)
 TEMP_IMAGE_DIR = Path(tempfile.gettempdir()) / "karaagy_images"
@@ -90,13 +96,16 @@ def extract_message_text(
 def build_agy_prompt(
     messages: list[ChatCompletionMessage],
     tracked_files: list[Path] | None = None,
+    response_format: ResponseFormat | dict[str, Any] | None = None,
 ) -> str:
-    """Format an array of OpenAI chat messages into a coherent prompt for AGY CLI."""
+    """Format an array of OpenAI chat messages into a coherent prompt for AGY CLI, injecting schema instructions when requested."""
     if not messages:
         return ""
 
-    # Check if single user message without system prompt
-    if len(messages) == 1 and messages[0].role == "user":
+    is_json = is_json_response_format(response_format)
+
+    # Only short-circuit if NOT in JSON mode and single user message
+    if not is_json and len(messages) == 1 and messages[0].role == "user":
         return extract_message_text(messages[0].content, tracked_files=tracked_files)
 
     system_parts: list[str] = []
@@ -121,6 +130,26 @@ def build_agy_prompt(
             conversation_parts.append(f"{name_prefix}: {content}")
         else:
             conversation_parts.append(f"{role.capitalize()}: {content}")
+
+    if is_json:
+        json_constraints = [
+            "CRITICAL FORMAT REQUIREMENT: You MUST respond ONLY with a raw, valid JSON payload.",
+            "Do NOT wrap the JSON output in Markdown code fences (do NOT use ```json or ```).",
+            "Do NOT include any explanatory text, conversational preamble, notes, or commentary before or after the JSON.",
+            "STRICT TOOL EXECUTION POLICY: Do NOT execute any tools or background tasks (no `run_command`, `read_file`, `write_file`, grep, etc.). All required data is present in this prompt. Immediately output the JSON payload.",
+        ]
+        schema_dict = extract_json_schema(response_format)
+        if schema_dict:
+            schema_str = json.dumps(schema_dict, indent=2, ensure_ascii=False)
+            json_constraints.append(
+                f"The JSON output MUST strictly conform to the following JSON Schema:\n{schema_str}"
+            )
+        else:
+            json_constraints.append(
+                "The JSON output MUST be a valid, well-formed JSON object or array."
+            )
+
+        system_parts.append("\n".join(json_constraints))
 
     prompt_segments: list[str] = []
 
