@@ -330,6 +330,18 @@ for msg in messages.data:
 
 Inactive threads are automatically pruned from disk after `KARAAGY_THREAD_TTL_SECONDS` (default 7 days).
 
+#### Native Multimodal Image Generation in Threads
+Karaagy supports unified native image generation within thread runs in a single API call. When the Antigravity agent creates or edits images during a turn (using its built-in image tools or writing to its isolated workspace), Karaagy automatically migrates the generated image to the public cache and appends an `image_url` block directly to the assistant's `ThreadMessage.content`:
+
+```json
+[
+  {"type": "text", "text": {"value": "Voici l'illustration demandée !"}},
+  {"type": "image_url", "image_url": {"url": "http://localhost:8000/v1/images/files/img_abcdef1234567890.jpg"}}
+]
+```
+
+In streaming runs (`stream: true`), markdown image links (`![Generated Image](<url>)`) are streamed prior to `data: [DONE]`.
+
 ---
 
 ### 8. Structured Outputs (`response_format`: `json_schema` & `json_object`)

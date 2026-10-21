@@ -3,10 +3,12 @@ import json
 import logging
 import re
 import tempfile
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
 
+from karaagy.config import settings
 from karaagy.models.openai import (
     ChatCompletionMessage,
     ResponseFormat,
@@ -19,7 +21,7 @@ TEMP_IMAGE_DIR = Path(tempfile.gettempdir()) / "karaagy_images"
 
 
 def _process_image_url(url: str, tracked_files: list[Path] | None = None) -> str:
-    """Extract clean URL or persist base64 data URI to a local file reference."""
+    """Extract clean URL, resolve local cache files, or persist image payload to a local file reference."""
     clean_url = url.strip()
     if clean_url.startswith("data:image/"):
         match = re.match(r"^data:image/([a-zA-Z0-9+.-]+);base64,(.+)$", clean_url, re.DOTALL)
@@ -39,6 +41,40 @@ def _process_image_url(url: str, tracked_files: list[Path] | None = None) -> str
                 logger.warning("Failed to decode base64 image payload: %s", e)
                 return "[Attached Image: <base64 image omitted>]"
         return "[Attached Image: <base64 image omitted>]"
+
+    # Fast shortcut: local cached images in karaagy_images_cache
+    match_cached = re.search(r"/v1/images/files/([a-zA-Z0-9_.-]+)$", clean_url)
+    if match_cached:
+        cached_filename = match_cached.group(1)
+        cached_path = settings.image_cache_dir / cached_filename
+        if cached_path.exists() and cached_path.is_file():
+            return f"[Attached Image File: {cached_path}]"
+
+    # For remote URLs, optionally pre-fetch into temp storage so AGY tools can inspect bytes directly
+    if clean_url.startswith(("http://", "https://")):
+        try:
+            req = urllib.request.Request(clean_url, headers={"User-Agent": "Karaagy/1.0"})
+            with urllib.request.urlopen(req, timeout=5.0) as resp:
+                content_type = resp.headers.get_content_type()
+                if "image" in content_type:
+                    raw_bytes = resp.read(15 * 1024 * 1024 + 1)
+                    if len(raw_bytes) <= 15 * 1024 * 1024:
+                        ext = (
+                            "jpg"
+                            if "jpeg" in content_type
+                            else (content_type.split("/")[-1] if "/" in content_type else "png")
+                        )
+                        if ext not in ("png", "jpg", "jpeg", "webp", "gif"):
+                            ext = "png"
+                        TEMP_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+                        img_file = TEMP_IMAGE_DIR / f"remote_{uuid.uuid4().hex[:12]}.{ext}"
+                        img_file.write_bytes(raw_bytes)
+                        if tracked_files is not None:
+                            tracked_files.append(img_file)
+                        return f"[Attached Image File: {img_file}]"
+        except Exception as e:
+            logger.debug("Failed to pre-fetch remote image %s: %s", clean_url, e)
+
     return f"[Attached Image URL: {clean_url}]"
 
 
