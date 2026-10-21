@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from karaagy.core.threads import ThreadManager
@@ -136,6 +136,7 @@ async def list_thread_messages(
 )
 async def create_thread_run(
     thread_id: str,
+    http_request: Request,
     request: CreateRunRequest | None = None,
 ) -> Any:
     """Execute a run on a thread."""
@@ -147,8 +148,9 @@ async def create_thread_run(
             detail=f"Thread '{thread_id}' not found.",
         )
 
+    base_url = str(http_request.base_url).rstrip("/")
     if req.stream:
-        stream_gen = ThreadManager.execute_run_stream(thread_id, req)
+        stream_gen = ThreadManager.execute_run_stream(thread_id, req, base_url=base_url)
         return StreamingResponse(
             stream_gen,
             media_type="text/event-stream",
@@ -159,7 +161,7 @@ async def create_thread_run(
             },
         )
 
-    run_obj, _ = await ThreadManager.execute_run(thread_id, req)
+    run_obj, _ = await ThreadManager.execute_run(thread_id, req, base_url=base_url)
     if run_obj.status == "failed":
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -183,6 +185,7 @@ async def create_thread_run(
     },
 )
 async def create_thread_and_run(
+    http_request: Request,
     request: CreateThreadAndRunRequest,
 ) -> Any:
     """Create a thread and execute a run in one single API request."""
@@ -199,8 +202,9 @@ async def create_thread_and_run(
         effort=request.effort,
     )
 
+    base_url = str(http_request.base_url).rstrip("/")
     if request.stream:
-        stream_gen = ThreadManager.execute_run_stream(thread.id, run_req)
+        stream_gen = ThreadManager.execute_run_stream(thread.id, run_req, base_url=base_url)
         return StreamingResponse(
             stream_gen,
             media_type="text/event-stream",
@@ -211,5 +215,5 @@ async def create_thread_and_run(
             },
         )
 
-    run_obj, _ = await ThreadManager.execute_run(thread.id, run_req)
+    run_obj, _ = await ThreadManager.execute_run(thread.id, run_req, base_url=base_url)
     return run_obj

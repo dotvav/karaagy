@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import shutil
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -20,7 +21,12 @@ from karaagy.core.process import (
 )
 from karaagy.core.prompt import cleanup_temp_images
 from karaagy.core.registry import ModelRegistry
-from karaagy.models.openai import UsageInfo
+from karaagy.models.openai import (
+    ChatCompletionChunk,
+    ChatCompletionChunkChoice,
+    ChatCompletionChunkDelta,
+    UsageInfo,
+)
 from karaagy.models.threads import (
     CreateRunRequest,
     CreateThreadMessageRequest,
@@ -59,6 +65,15 @@ class ThreadManager:
         if clean_id != thread_id or not re.match(r"^[a-zA-Z0-9_-]+$", thread_id):
             raise ValueError(f"Invalid thread ID format: '{thread_id}'.")
         return cls._get_storage_dir() / f"{clean_id}.json"
+
+    @classmethod
+    def _get_thread_workspace(cls, thread_id: str) -> Path:
+        clean_id = Path(thread_id).name
+        if clean_id != thread_id or not re.match(r"^[a-zA-Z0-9_-]+$", thread_id):
+            raise ValueError(f"Invalid thread ID format: '{thread_id}'.")
+        workspace_dir = cls._get_storage_dir() / "workspaces" / clean_id
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        return workspace_dir
 
     @classmethod
     def _save_state(cls, state: ThreadState) -> None:
@@ -151,6 +166,11 @@ class ThreadManager:
 
         if state.conversation_id:
             prune_conversation_storage(state.conversation_id)
+        try:
+            ws = cls._get_storage_dir() / "workspaces" / Path(thread_id).name
+            shutil.rmtree(ws, ignore_errors=True)
+        except Exception:
+            pass
         file_path = cls._get_thread_file(thread_id)
         try:
             file_path.unlink(missing_ok=True)
@@ -273,13 +293,135 @@ class ThreadManager:
         if user_content_parts:
             prompt_parts.append("\n".join(user_content_parts))
 
+        if settings.enable_native_image_generation:
+            prompt_parts.append(
+                "### SYSTEM CAPABILITIES:\n"
+                "When requested to create, generate, draw, or edit images, produce the image "
+                "natively using your image generation tools or write the image file directly "
+                "to the current workspace. Do not output raw [IMAGE: ...] pseudo-tags."
+            )
+
         return "\n\n".join(prompt_parts).strip()
+
+    IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
+
+    @classmethod
+    def _collect_and_cache_images(
+        cls,
+        thread_id: str,
+        convo_id: str | None,
+        workspace_dir: Path,
+        run_start_time: float,
+        base_url: str | None,
+        assistant_text: str,
+    ) -> tuple[list[dict[str, Any]], str]:
+        """Scan workspace and brain directories for newly created images and migrate them to public cache."""
+        candidate_files: list[Path] = []
+        effective_base_url = (
+            settings.public_base_url or base_url or "http://localhost:8000"
+        ).rstrip("/")
+
+        # 1. Sweep workspace directory recursively
+        if workspace_dir.exists() and workspace_dir.is_dir():
+            for p in workspace_dir.rglob("*"):
+                try:
+                    if p.is_file() and p.suffix.lower() in cls.IMAGE_EXTENSIONS:
+                        if p.stat().st_mtime >= run_start_time - 1.0:
+                            candidate_files.append(p)
+                except Exception:
+                    pass
+
+        # 2. Sweep conversation brain directory if convo_id known
+        if convo_id:
+            brain_dir = settings.antigravity_home / "brain" / convo_id
+            if brain_dir.exists() and brain_dir.is_dir():
+                for p in brain_dir.rglob("*"):
+                    try:
+                        if p.is_file() and p.suffix.lower() in cls.IMAGE_EXTENSIONS:
+                            if p.stat().st_mtime >= run_start_time - 1.0:
+                                candidate_files.append(p)
+                    except Exception:
+                        pass
+
+        # 3. Sweep any subagent brain directories updated during this run
+        base_brain = settings.antigravity_home / "brain"
+        if base_brain.exists() and base_brain.is_dir():
+            for subdir in base_brain.iterdir():
+                if subdir.is_dir() and (not convo_id or subdir.name != convo_id):
+                    try:
+                        if subdir.stat().st_mtime >= run_start_time - 1.0:
+                            for p in subdir.rglob("*"):
+                                if p.is_file() and p.suffix.lower() in cls.IMAGE_EXTENSIONS:
+                                    if p.stat().st_mtime >= run_start_time - 1.0:
+                                        candidate_files.append(p)
+                    except Exception:
+                        pass
+
+        # 4. Extract explicit local filesystem paths mentioned in assistant_text
+        path_matches = re.findall(
+            r"(?:/|[a-zA-Z]:[/\\])[\w\-./\\]+\.(?:png|jpg|jpeg|webp|gif|svg)",
+            assistant_text,
+            flags=re.IGNORECASE,
+        )
+        for raw_path in path_matches:
+            try:
+                p = Path(raw_path)
+                if p.exists() and p.is_file() and p.suffix.lower() in cls.IMAGE_EXTENSIONS:
+                    candidate_files.append(p)
+            except Exception:
+                pass
+
+        if not candidate_files:
+            return [], assistant_text
+
+        # Deduplicate while preserving order by mtime
+        unique_paths: dict[Path, Path] = {}
+        for p in candidate_files:
+            try:
+                resolved = p.resolve()
+                if resolved not in unique_paths:
+                    unique_paths[resolved] = p
+            except Exception:
+                pass
+
+        sorted_files = sorted(
+            unique_paths.values(),
+            key=lambda x: x.stat().st_mtime if x.exists() else 0.0,
+        )
+
+        settings.image_cache_dir.mkdir(parents=True, exist_ok=True)
+        image_parts: list[dict[str, Any]] = []
+        rewritten_text = assistant_text
+
+        for img_file in sorted_files:
+            try:
+                ext = img_file.suffix.lower()
+                target_filename = f"img_{uuid.uuid4().hex[:16]}{ext}"
+                target_path = settings.image_cache_dir / target_filename
+                shutil.copy2(img_file, target_path)
+
+                public_url = f"{effective_base_url}/v1/images/files/{target_filename}"
+                image_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": public_url},
+                    }
+                )
+
+                # Rewrite local path references in assistant text to the public URL
+                rewritten_text = rewritten_text.replace(str(img_file), public_url)
+                logger.info("Migrated thread generated image %s -> %s", img_file, public_url)
+            except Exception as e:
+                logger.warning("Failed to copy/cache thread generated image %s: %s", img_file, e)
+
+        return image_parts, rewritten_text
 
     @classmethod
     async def execute_run(
         cls,
         thread_id: str,
         run_req: CreateRunRequest,
+        base_url: str | None = None,
     ) -> tuple[RunObject, ThreadMessage | None]:
         """Execute a synchronous run on a thread."""
         state = cls._load_state(thread_id)
@@ -290,6 +432,8 @@ class ThreadManager:
         base_model, effort = ModelRegistry.resolve_model_and_effort(model_name, run_req.effort)
         run_id = f"run_{uuid.uuid4().hex[:20]}"
         tracked_images: list[Path] = []
+        workspace_dir = cls._get_thread_workspace(thread_id)
+        run_start_time = time.time()
 
         prompt_text = cls._build_run_prompt(state, run_req, tracked_images)
         if not prompt_text:
@@ -297,9 +441,10 @@ class ThreadManager:
 
         try:
             logger.info(
-                "Executing thread %s run %s (model=%s, convo=%s)",
+                "Executing thread %s run %s in %s (model=%s, convo=%s)",
                 thread_id,
                 run_id,
+                workspace_dir,
                 base_model,
                 state.conversation_id,
             )
@@ -308,6 +453,7 @@ class ThreadManager:
                 model=base_model,
                 effort=effort,
                 conversation_id=state.conversation_id,
+                cwd=workspace_dir,
             )
 
             # Capture and persist actual AGY conversation ID for future turns
@@ -320,11 +466,31 @@ class ThreadManager:
                 raw_c = completion.choices[0].message.content
                 assistant_text = raw_c if isinstance(raw_c, str) else str(raw_c or "")
 
-            # Append assistant response message to thread
-            asst_msg_req = CreateThreadMessageRequest(
-                role="assistant",
-                content=assistant_text,
+            # Collect and cache any images generated during this run
+            image_parts, rewritten_text = cls._collect_and_cache_images(
+                thread_id=thread_id,
+                convo_id=state.conversation_id,
+                workspace_dir=workspace_dir,
+                run_start_time=run_start_time,
+                base_url=base_url,
+                assistant_text=assistant_text,
             )
+
+            # Build assistant response content (multimodal array if images exist)
+            if image_parts:
+                content_list: list[dict[str, Any]] = []
+                if rewritten_text:
+                    content_list.append({"type": "text", "text": {"value": rewritten_text}})
+                content_list.extend(image_parts)
+                asst_msg_req = CreateThreadMessageRequest(
+                    role="assistant",
+                    content=content_list,
+                )
+            else:
+                asst_msg_req = CreateThreadMessageRequest(
+                    role="assistant",
+                    content=rewritten_text or assistant_text,
+                )
             asst_msg = cls.add_message(thread_id, asst_msg_req)
 
             run_obj = RunObject(
@@ -358,6 +524,7 @@ class ThreadManager:
         cls,
         thread_id: str,
         run_req: CreateRunRequest,
+        base_url: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Execute a streaming run on a thread yielding SSE events."""
         state = cls._load_state(thread_id)
@@ -368,6 +535,8 @@ class ThreadManager:
         base_model, effort = ModelRegistry.resolve_model_and_effort(model_name, run_req.effort)
         run_id = f"run_{uuid.uuid4().hex[:20]}"
         tracked_images: list[Path] = []
+        workspace_dir = cls._get_thread_workspace(thread_id)
+        run_start_time = time.time()
 
         prompt_text = cls._build_run_prompt(state, run_req, tracked_images)
         if not prompt_text:
@@ -375,12 +544,14 @@ class ThreadManager:
 
         accumulated_text: list[str] = []
         discovered_convo_id: str | None = state.conversation_id
+        assistant_message_saved = False
 
         try:
             logger.info(
-                "Executing thread %s streaming run %s (model=%s, convo=%s)",
+                "Executing thread %s streaming run %s in %s (model=%s, convo=%s)",
                 thread_id,
                 run_id,
+                workspace_dir,
                 base_model,
                 state.conversation_id,
             )
@@ -389,6 +560,7 @@ class ThreadManager:
                 model=base_model,
                 effort=effort,
                 conversation_id=state.conversation_id,
+                cwd=workspace_dir,
                 temp_files=tracked_images,
             ):
                 # Parse delta if needed to accumulate text for saving
@@ -405,21 +577,78 @@ class ThreadManager:
                                 accumulated_text.append(delta_content)
                     except Exception:
                         pass
-                yield chunk_str
+                    yield chunk_str
+                elif chunk_str.startswith("data: [DONE]"):
+                    full_assistant_text = "".join(accumulated_text).strip()
+                    image_parts, rewritten_text = cls._collect_and_cache_images(
+                        thread_id=thread_id,
+                        convo_id=discovered_convo_id,
+                        workspace_dir=workspace_dir,
+                        run_start_time=run_start_time,
+                        base_url=base_url,
+                        assistant_text=full_assistant_text,
+                    )
 
-            # Save completed assistant message
-            full_assistant_text = "".join(accumulated_text).strip()
-            if full_assistant_text:
-                asst_msg_req = CreateThreadMessageRequest(
-                    role="assistant",
-                    content=full_assistant_text,
-                )
-                cls.add_message(thread_id, asst_msg_req)
+                    if image_parts:
+                        new_image_markdown: list[str] = []
+                        for part in image_parts:
+                            img_url = part.get("image_url", {}).get("url", "")
+                            if img_url and img_url not in full_assistant_text:
+                                new_image_markdown.append(f"\n\n![Generated Image]({img_url})\n\n")
 
-            # Persist actual AGY conversation ID
-            if discovered_convo_id and discovered_convo_id != state.conversation_id:
-                state.conversation_id = discovered_convo_id
-                cls._save_state(state)
+                        if new_image_markdown:
+                            markdown_delta = "".join(new_image_markdown)
+                            chunk = ChatCompletionChunk(
+                                id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
+                                model=base_model,
+                                choices=[
+                                    ChatCompletionChunkChoice(
+                                        index=0,
+                                        delta=ChatCompletionChunkDelta(content=markdown_delta),
+                                        finish_reason=None,
+                                    )
+                                ],
+                            )
+                            yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                            rewritten_text += markdown_delta
+
+                        content_list: list[dict[str, Any]] = []
+                        if rewritten_text:
+                            content_list.append({"type": "text", "text": {"value": rewritten_text}})
+                        content_list.extend(image_parts)
+                        asst_msg_req = CreateThreadMessageRequest(
+                            role="assistant",
+                            content=content_list,
+                        )
+                    else:
+                        asst_msg_req = CreateThreadMessageRequest(
+                            role="assistant",
+                            content=rewritten_text or full_assistant_text,
+                        )
+                    cls.add_message(thread_id, asst_msg_req)
+                    assistant_message_saved = True
+
+                    # Persist actual AGY conversation ID
+                    if discovered_convo_id and discovered_convo_id != state.conversation_id:
+                        state.conversation_id = discovered_convo_id
+                        cls._save_state(state)
+
+                    yield chunk_str
+                else:
+                    yield chunk_str
+
+            # Fallback if stream ended without explicit [DONE]
+            if not assistant_message_saved:
+                full_assistant_text = "".join(accumulated_text).strip()
+                if full_assistant_text:
+                    asst_msg_req = CreateThreadMessageRequest(
+                        role="assistant",
+                        content=full_assistant_text,
+                    )
+                    cls.add_message(thread_id, asst_msg_req)
+                if discovered_convo_id and discovered_convo_id != state.conversation_id:
+                    state.conversation_id = discovered_convo_id
+                    cls._save_state(state)
 
         finally:
             cleanup_temp_images(tracked_images)
@@ -443,6 +672,8 @@ class ThreadManager:
                     convo_id = data.get("conversation_id")
                     if convo_id:
                         prune_conversation_storage(convo_id)
+                    ws_dir = storage_dir / "workspaces" / Path(thread_id).name
+                    shutil.rmtree(ws_dir, ignore_errors=True)
                     json_file.unlink(missing_ok=True)
                     pruned_count += 1
                     logger.info("Pruned expired thread %s (inactive for > %ds)", thread_id, ttl)

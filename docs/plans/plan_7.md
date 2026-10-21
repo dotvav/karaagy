@@ -2,7 +2,7 @@
 
 **Issue ID**: #7  
 **Target Plan**: [`docs/plans/plan_7.md`](file:///home/roukine/workspaces/karaagy/docs/plans/plan_7.md)  
-**Status**: DRAFT / READY FOR REVIEW  
+**Status**: COMPLETED  
 **Author**: Senior Software & System Architect Subagent  
 **Date**: 2026-10-21  
 
@@ -159,87 +159,87 @@ sequenceDiagram
 ### Phase 1: Configuration, Request Context & Base URL Injection
 **Model Assigned**: `flash` (Schema & Route plumbing)
 
-- [ ] **Task 1.1: Settings & Defaults Verification** ([`src/karaagy/config.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/config.py))
-  - Verify `threads_dir`, `image_cache_dir`, `image_cache_ttl_seconds`, and `public_base_url`.
-  - Add `enable_native_image_generation: bool = True` to [`KaraagySettings`](file:///home/roukine/workspaces/karaagy/src/karaagy/config.py#L10-L38).
-- [ ] **Task 1.2: Route Request Context Injection** ([`src/karaagy/api/routes_threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/api/routes_threads.py))
-  - Update `create_thread_run` and `create_thread_and_run` route signatures to accept `http_request: Request`.
-  - Extract `base_url = str(http_request.base_url).rstrip("/")`.
-  - Pass `base_url=base_url` to `ThreadManager.execute_run()` and `ThreadManager.execute_run_stream()`.
+- [x] **Task 1.1: Settings & Defaults Verification** ([`src/karaagy/config.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/config.py))
+  - [x] Verify `threads_dir`, `image_cache_dir`, `image_cache_ttl_seconds`, and `public_base_url`.
+  - [x] Add `enable_native_image_generation: bool = True` to [`KaraagySettings`](file:///home/roukine/workspaces/karaagy/src/karaagy/config.py#L10-L38).
+- [x] **Task 1.2: Route Request Context Injection** ([`src/karaagy/api/routes_threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/api/routes_threads.py))
+  - [x] Update `create_thread_run` and `create_thread_and_run` route signatures to accept `http_request: Request`.
+  - [x] Extract `base_url = str(http_request.base_url).rstrip("/")`.
+  - [x] Pass `base_url=base_url` to `ThreadManager.execute_run()` and `ThreadManager.execute_run_stream()`.
 
 ### Phase 2: Thread Workspace Lifecycle Management
 **Model Assigned**: `flash` (Filesystem primitives)
 
-- [ ] **Task 2.1: Workspace Resolution Helper** ([`src/karaagy/core/threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py))
-  - Implement `ThreadManager._get_thread_workspace(thread_id: str) -> Path`.
-  - Ensure sanitized thread ID validation prevents directory traversal.
-  - Automatically create directory: `workspace_dir.mkdir(parents=True, exist_ok=True)`.
-- [ ] **Task 2.2: Workspace Cleanup on Deletion & Expiration** ([`src/karaagy/core/threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py))
-  - In `ThreadManager.delete_thread(thread_id)`: remove `workspace_dir` via `shutil.rmtree(workspace_dir, ignore_errors=True)`.
-  - In `ThreadManager.prune_expired_threads()`: clean up corresponding workspace directories for expired threads.
+- [x] **Task 2.1: Workspace Resolution Helper** ([`src/karaagy/core/threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py))
+  - [x] Implement `ThreadManager._get_thread_workspace(thread_id: str) -> Path`.
+  - [x] Ensure sanitized thread ID validation prevents directory traversal.
+  - [x] Automatically create directory: `workspace_dir.mkdir(parents=True, exist_ok=True)`.
+- [x] **Task 2.2: Workspace Cleanup on Deletion & Expiration** ([`src/karaagy/core/threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py))
+  - [x] In `ThreadManager.delete_thread(thread_id)`: remove `workspace_dir` via `shutil.rmtree(workspace_dir, ignore_errors=True)`.
+  - [x] In `ThreadManager.prune_expired_threads()`: clean up corresponding workspace directories for expired threads.
 
 ### Phase 3: Multimodal Image-to-Image & Prompt Capability Guidance
 **Model Assigned**: `flash` (Prompt engineering & URL parsing)
 
-- [ ] **Task 3.1: Local Cached Image URL Shortcut** ([`src/karaagy/core/prompt.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/prompt.py#L21-L43))
-  - In `_process_image_url(url, tracked_files)`: detect `/v1/images/files/{filename}`.
-  - Resolve directly to local `settings.image_cache_dir / filename` if the file exists on disk.
-  - Return `[Attached Image File: {cached_path}]` without making outbound network requests.
-- [ ] **Task 3.2: Safe Remote Image Fetching** ([`src/karaagy/core/prompt.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/prompt.py))
-  - For external `http://` and `https://` URLs, implement safe download using `urllib.request.urlopen` with timeout=5.0s and 15MB limit into `TEMP_IMAGE_DIR`.
-  - Track downloaded file in `tracked_files` for automatic cleanup post-run.
-- [ ] **Task 3.3: Native Image Generation Capability Instructions** ([`src/karaagy/core/threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py#L221-L277))
-  - In `_build_run_prompt()`, append native generation capability guidance if `settings.enable_native_image_generation` is True:
+- [x] **Task 3.1: Local Cached Image URL Shortcut** ([`src/karaagy/core/prompt.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/prompt.py#L21-L43))
+  - [x] In `_process_image_url(url, tracked_files)`: detect `/v1/images/files/{filename}`.
+  - [x] Resolve directly to local `settings.image_cache_dir / filename` if the file exists on disk.
+  - [x] Return `[Attached Image File: {cached_path}]` without making outbound network requests.
+- [x] **Task 3.2: Safe Remote Image Fetching** ([`src/karaagy/core/prompt.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/prompt.py))
+  - [x] For external `http://` and `https://` URLs, implement safe download using `urllib.request.urlopen` with timeout=5.0s and 15MB limit into `TEMP_IMAGE_DIR`.
+  - [x] Track downloaded file in `tracked_files` for automatic cleanup post-run.
+- [x] **Task 3.3: Native Image Generation Capability Instructions** ([`src/karaagy/core/threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py#L221-L277))
+  - [x] In `_build_run_prompt()`, append native generation capability guidance if `settings.enable_native_image_generation` is True:
     *"When requested to create, generate, draw, or edit images, produce the image natively using your image generation tools or write the image file directly to the current workspace. Do not output raw [IMAGE: ...] pseudo-tags."*
 
 ### Phase 4: Artifact Detection, Cache Migration & Response Formatting
 **Model Assigned**: `pro` (Core logic, concurrency & streaming)
 
-- [ ] **Task 4.1: Artifact Scanner Implementation** ([`src/karaagy/core/threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py))
-  - Implement `ThreadManager._collect_and_cache_images(thread_id, convo_id, workspace_dir, run_start_time, base_url, assistant_text) -> tuple[list[dict[str, Any]], str]`.
-  - Sweep `workspace_dir` recursively for image extensions (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg`) with `mtime >= run_start_time - 1.0`.
-  - If `convo_id` is present, sweep `settings.antigravity_home / "brain" / convo_id` and any brain subagent folders modified after `run_start_time - 1.0`.
-  - Extract any existing file paths cited in `assistant_text` or transcript media.
-  - For each valid image:
-    - Generate unique target name: `img_{uuid.uuid4().hex[:16]}.{ext}`.
-    - Copy image to `settings.image_cache_dir`.
-    - Construct public URL: `f"{effective_base_url}/v1/images/files/{filename}"`.
-    - Build multimodal content part: `{"type": "image_url", "image_url": {"url": public_url}}`.
-    - Replace references to the local file path in `assistant_text` with the `public_url`.
-- [ ] **Task 4.2: Integrate into Synchronous Run** ([`ThreadManager.execute_run`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py#L279-L355))
-  - Pass `cwd=workspace_dir` to `_execute_agy_json_internal`.
-  - Call `_collect_and_cache_images()` after completion.
-  - Build multimodal `content` list: text part first, followed by `image_url` parts.
-  - Save `CreateThreadMessageRequest(role="assistant", content=content_list)`.
-- [ ] **Task 4.3: Integrate into Streaming Run** ([`ThreadManager.execute_run_stream`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py#L357-L426))
-  - Pass `cwd=workspace_dir` to `_execute_agy_stream_internal`.
-  - After stream process exits, invoke `_collect_and_cache_images()`.
-  - If new images were generated and are not already in markdown format in the streamed text, yield an SSE delta chunk containing `\n\n![Generated Image](<public_url>)\n\n` prior to `data: [DONE]`.
-  - Save the completed multimodal assistant message in thread history.
+- [x] **Task 4.1: Artifact Scanner Implementation** ([`src/karaagy/core/threads.py`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py))
+  - [x] Implement `ThreadManager._collect_and_cache_images(thread_id, convo_id, workspace_dir, run_start_time, base_url, assistant_text) -> tuple[list[dict[str, Any]], str]`.
+  - [x] Sweep `workspace_dir` recursively for image extensions (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg`) with `mtime >= run_start_time - 1.0`.
+  - [x] If `convo_id` is present, sweep `settings.antigravity_home / "brain" / convo_id` and any brain subagent folders modified after `run_start_time - 1.0`.
+  - [x] Extract any existing file paths cited in `assistant_text` or transcript media.
+  - [x] For each valid image:
+    - [x] Generate unique target name: `img_{uuid.uuid4().hex[:16]}.{ext}`.
+    - [x] Copy image to `settings.image_cache_dir`.
+    - [x] Construct public URL: `f"{effective_base_url}/v1/images/files/{filename}"`.
+    - [x] Build multimodal content part: `{"type": "image_url", "image_url": {"url": public_url}}`.
+    - [x] Replace references to the local file path in `assistant_text` with the `public_url`.
+- [x] **Task 4.2: Integrate into Synchronous Run** ([`ThreadManager.execute_run`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py#L279-L355))
+  - [x] Pass `cwd=workspace_dir` to `_execute_agy_json_internal`.
+  - [x] Call `_collect_and_cache_images()` after completion.
+  - [x] Build multimodal `content` list: text part first, followed by `image_url` parts.
+  - [x] Save `CreateThreadMessageRequest(role="assistant", content=content_list)`.
+- [x] **Task 4.3: Integrate into Streaming Run** ([`ThreadManager.execute_run_stream`](file:///home/roukine/workspaces/karaagy/src/karaagy/core/threads.py#L357-L426))
+  - [x] Pass `cwd=workspace_dir` to `_execute_agy_stream_internal`.
+  - [x] After stream process exits, invoke `_collect_and_cache_images()`.
+  - [x] If new images were generated and are not already in markdown format in the streamed text, yield an SSE delta chunk containing `\n\n![Generated Image](<public_url>)\n\n` prior to `data: [DONE]`.
+  - [x] Save the completed multimodal assistant message in thread history.
 
 ### Phase 5: Automated Test Suite & Regression Verification
 **Model Assigned**: `flash` (Unit tests & mock fixtures)
 
-- [ ] **Task 5.1: Thread Workspace Isolation Tests** ([`tests/test_threads.py`](file:///home/roukine/workspaces/karaagy/tests/test_threads.py))
-  - Verify workspace directory creation under `threads_dir / "workspaces" / thread_id`.
-  - Verify that `cwd` passed to `_execute_agy_json_internal` is the isolated workspace.
-  - Verify workspace directory is deleted when thread is deleted or pruned.
-- [ ] **Task 5.2: Native Image Ingestion & Cache Migration Tests** ([`tests/test_threads.py`](file:///home/roukine/workspaces/karaagy/tests/test_threads.py))
-  - Mock `_execute_agy_json_internal` to simulate image creation in the workspace during run.
-  - Verify image is copied to `image_cache_dir` with `img_` prefix.
-  - Verify assistant message contains both `text` and `image_url` content blocks.
-  - Verify local filesystem paths in assistant text are rewritten to public URLs.
-- [ ] **Task 5.3: Image-to-Image Local URL Shortcut Tests** ([`tests/test_threads.py`](file:///home/roukine/workspaces/karaagy/tests/test_threads.py))
-  - Provide user message with `http://localhost:8000/v1/images/files/img_test.jpg`.
-  - Verify prompt builder resolves directly to `[Attached Image File: /.../img_test.jpg]`.
-- [ ] **Task 5.4: Streaming Run Image Markdown Delta Tests** ([`tests/test_threads.py`](file:///home/roukine/workspaces/karaagy/tests/test_threads.py))
-  - Verify streaming run emits image markdown delta and saves multimodal message.
-- [ ] **Task 5.5: Static Analysis & Test Suite Validation**
-  - Execute `uv run ruff check .`
-  - Execute `uv run ruff format --check .`
-  - Execute `uv run mypy .`
-  - Execute `uv run pytest tests/test_threads.py -v`
-  - Execute `uv run pytest tests/test_images.py -v`
+- [x] **Task 5.1: Thread Workspace Isolation Tests** ([`tests/test_threads.py`](file:///home/roukine/workspaces/karaagy/tests/test_threads.py))
+  - [x] Verify workspace directory creation under `threads_dir / "workspaces" / thread_id`.
+  - [x] Verify that `cwd` passed to `_execute_agy_json_internal` is the isolated workspace.
+  - [x] Verify workspace directory is deleted when thread is deleted or pruned.
+- [x] **Task 5.2: Native Image Ingestion & Cache Migration Tests** ([`tests/test_threads.py`](file:///home/roukine/workspaces/karaagy/tests/test_threads.py))
+  - [x] Mock `_execute_agy_json_internal` to simulate image creation in the workspace during run.
+  - [x] Verify image is copied to `image_cache_dir` with `img_` prefix.
+  - [x] Verify assistant message contains both `text` and `image_url` content blocks.
+  - [x] Verify local filesystem paths in assistant text are rewritten to public URLs.
+- [x] **Task 5.3: Image-to-Image Local URL Shortcut Tests** ([`tests/test_threads.py`](file:///home/roukine/workspaces/karaagy/tests/test_threads.py))
+  - [x] Provide user message with `http://localhost:8000/v1/images/files/img_test.jpg`.
+  - [x] Verify prompt builder resolves directly to `[Attached Image File: /.../img_test.jpg]`.
+- [x] **Task 5.4: Streaming Run Image Markdown Delta Tests** ([`tests/test_threads.py`](file:///home/roukine/workspaces/karaagy/tests/test_threads.py))
+  - [x] Verify streaming run emits image markdown delta and saves multimodal message.
+- [x] **Task 5.5: Static Analysis & Test Suite Validation**
+  - [x] Execute `uv run ruff check .`
+  - [x] Execute `uv run ruff format --check .`
+  - [x] Execute `uv run mypy .`
+  - [x] Execute `uv run pytest tests/test_threads.py -v`
+  - [x] Execute `uv run pytest tests/test_images.py -v`
 
 ---
 

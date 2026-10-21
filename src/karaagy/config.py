@@ -29,6 +29,7 @@ class KaraagySettings(BaseSettings):
     image_cache_ttl_seconds: float = 86400.0
     threads_dir: Path = Path.home() / ".gemini" / "antigravity-cli" / "karaagy_threads"
     thread_ttl_seconds: float = 604800.0  # 7 days TTL for inactive threads
+    enable_native_image_generation: bool = True
 
     model_config = SettingsConfigDict(
         env_prefix="KARAAGY_",
