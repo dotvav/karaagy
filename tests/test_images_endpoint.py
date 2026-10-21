@@ -87,6 +87,82 @@ def test_images_generations_url_and_fetch(
         assert file_res.headers["content-type"].startswith("image/jpeg")
         assert file_res.content == fake_jpeg_bytes
 
+        # Verify dual payload: b64_json is populated alongside url
+        assert data["data"][0]["b64_json"] == base64.b64encode(fake_jpeg_bytes).decode("utf-8")
+
+
+@patch("karaagy.core.images._generate_single_image", new_callable=AsyncMock)
+def test_images_generations_omitted_response_format(
+    mock_gen: AsyncMock, client: TestClient, tmp_path: Path
+) -> None:
+    """Test image generation when response_format is omitted (Vercel AI SDK default)."""
+    fake_png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR_VERCEL_TEST"
+    mock_gen.return_value = (fake_png_bytes, "image/png")
+
+    with patch.object(settings, "image_cache_dir", tmp_path):
+        payload = {
+            "model": "gemini-3.8-flash-high",
+            "prompt": "A photograph of the dish described below...",
+            "n": 1,
+            "size": "1280x720",
+        }
+        response = client.post("/v1/images/generations", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert len(data["data"]) == 1
+
+        img_item = data["data"][0]
+        assert isinstance(img_item["b64_json"], str)
+        assert img_item["b64_json"] == base64.b64encode(fake_png_bytes).decode("utf-8")
+        assert base64.b64decode(img_item["b64_json"]) == fake_png_bytes
+        assert img_item["url"] is not None
+        assert "/v1/images/files/img_" in img_item["url"]
+
+
+@patch("karaagy.core.images._generate_single_image", new_callable=AsyncMock)
+def test_images_generations_explicit_null_response_format(
+    mock_gen: AsyncMock, client: TestClient, tmp_path: Path
+) -> None:
+    """Test image generation when response_format is explicitly passed as null."""
+    fake_png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR_NULL_TEST"
+    mock_gen.return_value = (fake_png_bytes, "image/png")
+
+    with patch.object(settings, "image_cache_dir", tmp_path):
+        payload = {
+            "prompt": "Minimalist geometric sculpture",
+            "response_format": None,
+        }
+        response = client.post("/v1/images/generations", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert len(data["data"]) == 1
+        assert data["data"][0]["b64_json"] == base64.b64encode(fake_png_bytes).decode("utf-8")
+        assert data["data"][0]["url"] is not None
+
+
+@patch("karaagy.core.images._generate_single_image", new_callable=AsyncMock)
+def test_images_generations_multi_image_dual_payload(
+    mock_gen: AsyncMock, client: TestClient, tmp_path: Path
+) -> None:
+    """Test image generation with n=2 populating b64_json and url on every returned ImageObject."""
+    fake_png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR_MULTI"
+    mock_gen.return_value = (fake_png_bytes, "image/png")
+
+    with patch.object(settings, "image_cache_dir", tmp_path):
+        payload = {
+            "prompt": "Two variations of a logo",
+            "n": 2,
+        }
+        response = client.post("/v1/images/generations", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["data"]) == 2
+        for item in data["data"]:
+            assert item["b64_json"] == base64.b64encode(fake_png_bytes).decode("utf-8")
+            assert item["url"] is not None
+
 
 def test_get_cached_image_not_found(client: TestClient) -> None:
     """Test 404 when requesting a non-existent cached image."""

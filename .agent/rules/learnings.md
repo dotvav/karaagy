@@ -244,4 +244,25 @@ if outer_match:
     return inner
 ```
 
+---
+
+## 🛠️ 19. Dual Payload Population in `/v1/images/generations` for Vercel AI SDK Compatibility
+- **Last Updated**: 2026-10-21T05:40:00Z
+- **The Issue**: Clients using `@ai-sdk/openai-compatible` (such as Norish via `OpenAICompatibleImageModel.doGenerate`) call `POST /v1/images/generations` without specifying `response_format` in the request payload. In Karaagy, `response_format` defaulted to `"url"`, returning `ImageObject(url=file_url)` with `b64_json=None`. FastAPI serialized this as `"b64_json": null`. However, `@ai-sdk/openai-compatible` validates responses against `data: z.array(z.object({ b64_json: z.string() }))`. Because Zod's `z.string()` rejects `null`, the client crashes with `ZodError: Invalid input: expected string, received null at path ["data", 0, "b64_json"]`.
+- **The Gotcha**: Standard OpenAI client SDKs treat both `b64_json` and `url` as optional fields, whereas Vercel AI SDK strictly mandates `b64_json: z.string()`. Populating both fields simultaneously in the `"url"` branch satisfies both client ecosystems with zero extra disk I/O and <1ms encoding overhead since `img_bytes` is already in memory.
+- **Code / Solution**:
+```python
+b64_str = base64.b64encode(img_bytes).decode("utf-8")
+if request.response_format == "b64_json":
+    image_objects.append(ImageObject(b64_json=b64_str, revised_prompt=prompt_clean))
+else:
+    filename = f"img_{uuid.uuid4().hex[:16]}{ext}"
+    target_path = settings.image_cache_dir / filename
+    target_path.write_bytes(img_bytes)
+    root_url = (settings.public_base_url or base_url).rstrip("/")
+    file_url = f"{root_url}/v1/images/files/{filename}"
+    image_objects.append(ImageObject(url=file_url, b64_json=b64_str, revised_prompt=prompt_clean))
+```
+
+
 

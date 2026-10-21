@@ -193,11 +193,11 @@ async def generate_images(request: ImageGenerationRequest, base_url: str) -> Ima
             completion_tokens=0,
         )
 
+        b64_str = base64.b64encode(img_bytes).decode("utf-8")
         if request.response_format == "b64_json":
-            b64_str = base64.b64encode(img_bytes).decode("utf-8")
             image_objects.append(ImageObject(b64_json=b64_str, revised_prompt=prompt_clean))
         else:
-            # Default to url format
+            # Default to url format, dual-populating b64_json for Vercel AI SDK compatibility
             ext = ".jpg" if "jpeg" in mime_type else ".png"
             filename = f"img_{uuid.uuid4().hex[:16]}{ext}"
             target_path = settings.image_cache_dir / filename
@@ -205,6 +205,8 @@ async def generate_images(request: ImageGenerationRequest, base_url: str) -> Ima
 
             root_url = (settings.public_base_url or base_url).rstrip("/")
             file_url = f"{root_url}/v1/images/files/{filename}"
-            image_objects.append(ImageObject(url=file_url, revised_prompt=prompt_clean))
+            image_objects.append(
+                ImageObject(url=file_url, b64_json=b64_str, revised_prompt=prompt_clean)
+            )
 
     return ImagesResponse(created=int(time.time()), data=image_objects)

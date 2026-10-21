@@ -281,7 +281,7 @@ image_res = client.images.generate(
 print("Generated Image URL:", image_res.data[0].url)
 ```
 
-Generated image files are stored locally in `KARAAGY_IMAGE_CACHE_DIR` and automatically purged after `KARAAGY_IMAGE_CACHE_TTL_SECONDS` (default 24h).
+Generated image files are stored locally in `KARAAGY_IMAGE_CACHE_DIR` and automatically purged after `KARAAGY_IMAGE_CACHE_TTL_SECONDS` (default 24h). Responses provide both `url` and `b64_json` simultaneously when `response_format` is `"url"` or omitted, ensuring out-of-the-box compatibility with the Vercel AI SDK (`@ai-sdk/openai-compatible`) and URL-based frontends.
 
 ---
 
