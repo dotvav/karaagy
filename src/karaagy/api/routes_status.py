@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from karaagy.api.templates import get_logo_svg, render_status_html
@@ -47,6 +47,7 @@ async def get_root_status(request: Request) -> Any:
     models = await ModelRegistry.get_available_models()
     settings_dict = DiagnosticsManager.get_runtime_settings_dict()
     env_vars = DiagnosticsManager.get_sanitized_environment()
+    hourly_metrics = DiagnosticsManager.get_hourly_metrics(days=7)
 
     # Browser request -> HTML response
     if "text/html" in accept_header:
@@ -60,6 +61,7 @@ async def get_root_status(request: Request) -> Any:
             aliases=MODEL_ALIASES,
             settings_dict=settings_dict,
             env_vars=env_vars,
+            hourly_metrics=hourly_metrics,
         )
         return HTMLResponse(content=html_content, status_code=200)
 
@@ -75,6 +77,7 @@ async def get_root_status(request: Request) -> Any:
                 "binary": settings_dict["resolved_agy_bin"],
             },
             "metrics": metrics,
+            "activity_7d": hourly_metrics["summary"],
             "quota": quota_data,
             "models": {
                 "available": models,
@@ -89,6 +92,7 @@ async def get_root_status(request: Request) -> Any:
                 "health": f"{base_url}/healthz",
                 "docs": f"{base_url}/docs",
                 "refresh_usage": f"{base_url}/v1/system/refresh-usage",
+                "hourly_metrics": f"{base_url}/v1/system/metrics/hourly",
             },
         },
         status_code=200,
@@ -105,6 +109,7 @@ async def get_system_status(request: Request) -> Any:
     quota_data = await DiagnosticsManager.get_account_quota()
     models = await ModelRegistry.get_available_models()
     settings_dict = DiagnosticsManager.get_runtime_settings_dict()
+    hourly_metrics = DiagnosticsManager.get_hourly_metrics(days=7)
 
     return {
         "service": settings.app_name,
@@ -116,6 +121,7 @@ async def get_system_status(request: Request) -> Any:
             "binary": settings_dict["resolved_agy_bin"],
         },
         "metrics": metrics,
+        "activity_7d": hourly_metrics["summary"],
         "quota": quota_data,
         "models": {
             "count": len(models),
@@ -123,6 +129,18 @@ async def get_system_status(request: Request) -> Any:
             "default": settings.default_model,
         },
     }
+
+
+@router.get(
+    "/v1/system/metrics/hourly",
+    summary="Hourly Activity & Token Metrics",
+    description="Returns hourly bucketed request counts and token consumption over the past N days.",
+)
+async def get_hourly_metrics_api(
+    days: int = Query(7, ge=1, le=30, description="Number of days of hourly history (1 to 30)"),
+) -> Any:
+    """Return hourly activity time series and summary statistics."""
+    return DiagnosticsManager.get_hourly_metrics(days=days)
 
 
 @router.post("/v1/system/refresh-usage", summary="Force Refresh Antigravity Quota Cache")

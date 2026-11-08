@@ -3,6 +3,7 @@
 import base64
 import functools
 import html
+import json
 from pathlib import Path
 from typing import Any
 
@@ -45,9 +46,24 @@ def render_status_html(
     aliases: dict[str, str],
     settings_dict: dict[str, Any],
     env_vars: dict[str, str],
+    hourly_metrics: dict[str, Any] | None = None,
 ) -> str:
     """Render the full self-contained HTML status page."""
     clean_base = base_url.rstrip("/")
+
+    # Hourly metrics summary
+    hourly_data = hourly_metrics or {"series": [], "summary": {}}
+    hourly_summary = hourly_data.get("summary", {})
+    sum_req = hourly_summary.get("total_requests", 0)
+    sum_succ = hourly_summary.get("successful_requests", 0)
+    sum_fail = hourly_summary.get("failed_requests", 0)
+    succ_pct = hourly_summary.get("success_rate_percent", 100.0)
+    sum_prompt = hourly_summary.get("total_prompt_tokens", 0)
+    sum_comp = hourly_summary.get("total_completion_tokens", 0)
+    sum_tok = hourly_summary.get("total_tokens", 0)
+    peak_req = hourly_summary.get("peak_hourly_requests", 0)
+    peak_tok = hourly_summary.get("peak_hourly_tokens", 0)
+    hourly_json_str = json.dumps(hourly_data)
 
     # Build quota cards HTML
     quota_html_parts = []
@@ -339,6 +355,93 @@ def render_status_html(
             opacity: 0.6;
             cursor: not-allowed;
         }}
+        .chart-controls {{
+            display: flex;
+            gap: 6px;
+        }}
+        .btn-chart {{
+            background-color: var(--code-bg);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }}
+        .btn-chart:hover {{
+            color: var(--text-heading);
+            border-color: var(--primary);
+        }}
+        .btn-chart.active {{
+            background-color: var(--primary-bg);
+            color: var(--primary);
+            border-color: var(--primary);
+            font-weight: 600;
+        }}
+        .chart-wrapper {{
+            position: relative;
+            width: 100%;
+            height: 220px;
+            background-color: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            overflow: hidden;
+        }}
+        .activity-svg {{
+            width: 100%;
+            height: 100%;
+            display: block;
+            overflow: visible;
+        }}
+        .chart-tooltip {{
+            position: absolute;
+            display: none;
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.78rem;
+            color: var(--text-heading);
+            pointer-events: none;
+            z-index: 20;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            white-space: nowrap;
+        }}
+        .chart-tooltip-date {{
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 4px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--border);
+        }}
+        .chart-tooltip-row {{
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 2px;
+        }}
+        .chart-legend {{
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 10px;
+        }}
+        .legend-item {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .legend-color {{
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            display: inline-block;
+        }}
         .grid-4 {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -568,6 +671,52 @@ def render_status_html(
             </div>
         </section>
 
+        <!-- 7-Day Hourly Activity & Throughput Graph -->
+        <section class="card" id="activity-section">
+            <div class="card-header">
+                <div class="card-title">📈 7-Day Hourly Activity & Throughput</div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <a class="btn" href="{clean_base}/v1/system/metrics/hourly?days=7" target="_blank" style="font-size: 0.75rem;">JSON Series</a>
+                    <div class="chart-controls">
+                        <button class="btn-chart active" id="btn-metric-requests" onclick="switchMetric('requests')">Requêtes / h</button>
+                        <button class="btn-chart" id="btn-metric-tokens" onclick="switchMetric('tokens')">Tokens / h</button>
+                    </div>
+                </div>
+            </div>
+            <div class="grid-4" style="margin-bottom: 16px;">
+                <div class="stat-box">
+                    <div class="stat-label">7-Day Requests</div>
+                    <div class="stat-value">{sum_req:,}</div>
+                    <div class="stat-sub">{sum_succ:,} OK · {sum_fail:,} Failed ({succ_pct}%)</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Peak Hourly Requests</div>
+                    <div class="stat-value">{peak_req:,} <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">req/h</span></div>
+                    <div class="stat-sub">Max requests in 1 hour</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">7-Day Tokens</div>
+                    <div class="stat-value">{sum_tok:,}</div>
+                    <div class="stat-sub">{sum_prompt:,} in · {sum_comp:,} out</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Peak Hourly Tokens</div>
+                    <div class="stat-value">{peak_tok:,} <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">tok/h</span></div>
+                    <div class="stat-sub">Max tokens in 1 hour</div>
+                </div>
+            </div>
+
+            <div class="chart-wrapper">
+                <div id="chart-tooltip" class="chart-tooltip"></div>
+                <svg id="activity-chart" class="activity-svg" viewBox="0 0 1000 220" preserveAspectRatio="none"></svg>
+            </div>
+            <div class="chart-legend">
+                <span class="legend-item" id="legend-primary"><span class="legend-color" style="background-color: #3fb950;"></span> Requêtes réussies (OK)</span>
+                <span class="legend-item" id="legend-secondary"><span class="legend-color" style="background-color: #f85149;"></span> Erreurs (Failed)</span>
+                <span style="margin-left: auto; font-size: 0.75rem; color: var(--text-muted);">168 heures glissantes (7 derniers jours UTC) · Survoler une barre pour le détail</span>
+            </div>
+        </section>
+
         <!-- Discovered Models -->
         <section class="card">
             <div class="card-header">
@@ -647,6 +796,7 @@ def render_status_html(
         </footer>
     </div>
 
+    <script id="hourly-data" type="application/json">{hourly_json_str}</script>
     <script>
         function copyCode(btn) {{
             const pre = btn.parentElement;
@@ -678,6 +828,181 @@ def render_status_html(
                 btn.classList.remove('btn-disabled');
             }}
         }}
+
+        const hourlyDataEl = document.getElementById('hourly-data');
+        const hourlyMetrics = hourlyDataEl ? JSON.parse(hourlyDataEl.textContent) : {{ series: [], summary: {{}} }};
+        let currentMetric = 'requests';
+
+        function switchMetric(metric) {{
+            currentMetric = metric;
+            const btnReq = document.getElementById('btn-metric-requests');
+            const btnTok = document.getElementById('btn-metric-tokens');
+            if (btnReq) btnReq.classList.toggle('active', metric === 'requests');
+            if (btnTok) btnTok.classList.toggle('active', metric === 'tokens');
+
+            const legPrimary = document.getElementById('legend-primary');
+            const legSecondary = document.getElementById('legend-secondary');
+            if (legPrimary && legSecondary) {{
+                if (metric === 'requests') {{
+                    legPrimary.innerHTML = '<span class="legend-color" style="background-color: #3fb950;"></span> Requêtes réussies (OK)';
+                    legSecondary.innerHTML = '<span class="legend-color" style="background-color: #f85149;"></span> Erreurs (Failed)';
+                }} else {{
+                    legPrimary.innerHTML = '<span class="legend-color" style="background-color: #58a6ff;"></span> Prompt Tokens (Entrée)';
+                    legSecondary.innerHTML = '<span class="legend-color" style="background-color: #bc8cff;"></span> Completion Tokens (Sortie)';
+                }}
+            }}
+            renderActivityChart();
+        }}
+
+        function renderActivityChart() {{
+            const svg = document.getElementById('activity-chart');
+            if (!svg || !hourlyMetrics.series || hourlyMetrics.series.length === 0) return;
+
+            const series = hourlyMetrics.series;
+            const n = series.length;
+            const plotLeft = 60;
+            const plotRight = 985;
+            const plotWidth = plotRight - plotLeft;
+            const plotTop = 20;
+            const plotBottom = 180;
+            const plotHeight = plotBottom - plotTop;
+            const slotWidth = plotWidth / n;
+            const barWidth = Math.max(2, slotWidth * 0.72);
+
+            let maxVal = 0;
+            for (let i = 0; i < n; i++) {{
+                const d = series[i];
+                const v = currentMetric === 'requests' ? d.total_requests : (d.prompt_tokens + d.completion_tokens);
+                if (v > maxVal) maxVal = v;
+            }}
+            if (maxVal === 0) maxVal = (currentMetric === 'requests' ? 5 : 1000);
+
+            const elements = [];
+
+            // Grid lines and Y-axis
+            const steps = 3;
+            for (let s = 0; s <= steps; s++) {{
+                const ratio = s / steps;
+                const y = plotBottom - (ratio * plotHeight);
+                const val = Math.round(ratio * maxVal);
+                let valFormatted = val >= 1000000 ? (val / 1000000).toFixed(1) + 'M' : (val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val);
+                elements.push('<line x1="' + plotLeft + '" y1="' + y + '" x2="' + plotRight + '" y2="' + y + '" stroke="var(--border)" stroke-width="1" stroke-dasharray="' + (s === 0 ? 'none' : '3,3') + '" opacity="' + (s === 0 ? '0.8' : '0.4') + '"/>');
+                elements.push('<text x="' + (plotLeft - 8) + '" y="' + (y + 4) + '" fill="var(--text-muted)" font-size="10" text-anchor="end" font-family="var(--font-mono)">' + valFormatted + '</text>');
+            }}
+
+            // Day transitions and X-axis ticks
+            for (let i = 0; i < n; i++) {{
+                const d = series[i];
+                if (d.hour === '00:00' || (i === 0 && d.hour < '06:00')) {{
+                    const x = plotLeft + (i * slotWidth);
+                    elements.push('<line x1="' + x + '" y1="' + plotTop + '" x2="' + x + '" y2="' + plotBottom + '" stroke="var(--border)" stroke-width="1" opacity="0.6"/>');
+                    const dateLabel = d.date ? d.date.slice(5) : '';
+                    elements.push('<text x="' + (x + 3) + '" y="' + (plotBottom + 18) + '" fill="var(--text-muted)" font-size="10" font-family="var(--font-mono)">' + dateLabel + '</text>');
+                }}
+            }}
+
+            // Baseline
+            elements.push('<line x1="' + plotLeft + '" y1="' + plotBottom + '" x2="' + plotRight + '" y2="' + plotBottom + '" stroke="var(--border)" stroke-width="1"/>');
+
+            // Bars & hitboxes
+            for (let i = 0; i < n; i++) {{
+                const d = series[i];
+                const xCenter = plotLeft + (i * slotWidth) + (slotWidth / 2);
+                const x = xCenter - (barWidth / 2);
+
+                if (currentMetric === 'requests') {{
+                    const succ = d.successful_requests || 0;
+                    const fail = d.failed_requests || 0;
+                    const tot = succ + fail;
+                    if (tot === 0) {{
+                        elements.push('<line x1="' + x + '" y1="' + plotBottom + '" x2="' + (x + barWidth) + '" y2="' + plotBottom + '" stroke="var(--border)" stroke-width="1" opacity="0.4"/>');
+                    }} else {{
+                        const hSucc = (succ / maxVal) * plotHeight;
+                        const hFail = (fail / maxVal) * plotHeight;
+                        const ySucc = plotBottom - hSucc;
+                        const yFail = ySucc - hFail;
+                        if (succ > 0) {{
+                            elements.push('<rect x="' + x + '" y="' + ySucc + '" width="' + barWidth + '" height="' + Math.max(1, hSucc) + '" fill="#3fb950" rx="1"/>');
+                        }}
+                        if (fail > 0) {{
+                            elements.push('<rect x="' + x + '" y="' + yFail + '" width="' + barWidth + '" height="' + Math.max(1, hFail) + '" fill="#f85149" rx="1"/>');
+                        }}
+                    }}
+                }} else {{
+                    const prompt = d.prompt_tokens || 0;
+                    const comp = d.completion_tokens || 0;
+                    const tot = prompt + comp;
+                    if (tot === 0) {{
+                        elements.push('<line x1="' + x + '" y1="' + plotBottom + '" x2="' + (x + barWidth) + '" y2="' + plotBottom + '" stroke="var(--border)" stroke-width="1" opacity="0.4"/>');
+                    }} else {{
+                        const hPrompt = (prompt / maxVal) * plotHeight;
+                        const hComp = (comp / maxVal) * plotHeight;
+                        const yPrompt = plotBottom - hPrompt;
+                        const yComp = yPrompt - hComp;
+                        if (prompt > 0) {{
+                            elements.push('<rect x="' + x + '" y="' + yPrompt + '" width="' + barWidth + '" height="' + Math.max(1, hPrompt) + '" fill="#58a6ff" rx="1"/>');
+                        }}
+                        if (comp > 0) {{
+                            elements.push('<rect x="' + x + '" y="' + yComp + '" width="' + barWidth + '" height="' + Math.max(1, hComp) + '" fill="#bc8cff" rx="1"/>');
+                        }}
+                    }}
+                }}
+
+                // Hitbox for hover
+                elements.push('<rect class="bar-hitbox" data-idx="' + i + '" x="' + (plotLeft + i * slotWidth) + '" y="' + plotTop + '" width="' + slotWidth + '" height="' + (plotHeight + 25) + '" fill="transparent" style="cursor: pointer;"/>');
+            }}
+
+            svg.innerHTML = elements.join('');
+            attachTooltipEvents();
+        }}
+
+        function attachTooltipEvents() {{
+            const wrapper = document.querySelector('.chart-wrapper');
+            const tooltip = document.getElementById('chart-tooltip');
+            const hitboxes = document.querySelectorAll('.bar-hitbox');
+
+            hitboxes.forEach(function(box) {{
+                box.addEventListener('mouseenter', function(e) {{
+                    const idx = parseInt(box.getAttribute('data-idx'));
+                    const d = hourlyMetrics.series[idx];
+                    if (!d) return;
+
+                    const totTokens = (d.prompt_tokens || 0) + (d.completion_tokens || 0);
+                    tooltip.innerHTML = '<div class="chart-tooltip-date">📅 ' + d.label + ' UTC</div>' +
+                        '<div class="chart-tooltip-row"><span style="color: #3fb950;">● Requêtes :</span><strong>' + d.total_requests + ' (' + d.successful_requests + ' ok, ' + d.failed_requests + ' err)</strong></div>' +
+                        '<div class="chart-tooltip-row"><span style="color: #58a6ff;">● Tokens :</span><strong>' + totTokens.toLocaleString() + ' (' + d.prompt_tokens.toLocaleString() + ' in · ' + d.completion_tokens.toLocaleString() + ' out)</strong></div>';
+                    tooltip.style.display = 'block';
+                    positionTooltip(e, wrapper, tooltip);
+                }});
+
+                box.addEventListener('mousemove', function(e) {{
+                    positionTooltip(e, wrapper, tooltip);
+                }});
+
+                box.addEventListener('mouseleave', function() {{
+                    tooltip.style.display = 'none';
+                }});
+            }});
+        }}
+
+        function positionTooltip(e, wrapper, tooltip) {{
+            const rect = wrapper.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const tooltipWidth = tooltip.offsetWidth || 220;
+            let left = x + 15;
+            if (left + tooltipWidth > rect.width) {{
+                left = x - tooltipWidth - 15;
+            }}
+            const top = Math.max(10, y - 40);
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        }}
+
+        document.addEventListener('DOMContentLoaded', function() {{
+            switchMetric('requests');
+        }});
+        setTimeout(function() {{ switchMetric('requests'); }}, 50);
     </script>
 </body>
 </html>

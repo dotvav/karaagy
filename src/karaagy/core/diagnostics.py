@@ -13,6 +13,7 @@ from typing import Any
 
 from karaagy import __version__ as karaagy_version
 from karaagy.config import settings
+from karaagy.core.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ EXPLICIT_SAFE_KEYS = {
     "KARAAGY_THREAD_TTL_SECONDS",
     "KARAAGY_MAX_RETRIES",
     "KARAAGY_INITIAL_BACKOFF",
+    "KARAAGY_DATABASE_PATH",
 }
 
 
@@ -86,6 +88,41 @@ class DiagnosticsManager:
             cls._failed_requests += 1
         cls._total_prompt_tokens += prompt_tokens
         cls._total_completion_tokens += completion_tokens
+
+        try:
+            DatabaseManager.record_metric(
+                success=success,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except Exception as e:
+            logger.warning("Failed to record metric to SQLite: %s", e)
+
+    @classmethod
+    def get_hourly_metrics(cls, days: int = 7) -> dict[str, Any]:
+        """Fetch hourly metrics for the last N days from SQLite."""
+        try:
+            res: dict[str, Any] = DatabaseManager.get_hourly_metrics(days=days)
+            return res
+        except Exception as e:
+            logger.warning("Failed to get hourly metrics: %s", e)
+            return {
+                "days": days,
+                "generated_at": datetime.now(UTC).isoformat(),
+                "summary": {
+                    "days": days,
+                    "total_requests": 0,
+                    "successful_requests": 0,
+                    "failed_requests": 0,
+                    "success_rate_percent": 100.0,
+                    "total_prompt_tokens": 0,
+                    "total_completion_tokens": 0,
+                    "total_tokens": 0,
+                    "peak_hourly_requests": 0,
+                    "peak_hourly_tokens": 0,
+                },
+                "series": [],
+            }
 
     @classmethod
     def get_uptime_seconds(cls) -> float:
@@ -364,4 +401,5 @@ class DiagnosticsManager:
             "thread_ttl_seconds": settings.thread_ttl_seconds,
             "resolved_agy_bin": settings.resolve_agy_bin(),
             "antigravity_home": str(settings.antigravity_home),
+            "database_path": str(settings.resolve_database_path()),
         }

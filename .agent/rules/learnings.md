@@ -290,6 +290,40 @@ image_parts, rewritten_text = cls._collect_and_cache_images(
 )
 ```
 
+---
+
+## 🛠️ 21. SQLite Unified Persistence for Gateway Time-Series & Thread Management
+- **Last Updated**: 2026-11-08T07:57:00Z
+- **The Issue**: Gateway throughput metrics were volatile (resetting on container reload), preventing historical hourly tracking. Meanwhile, OpenAI Assistant threads were stored as individual flat JSON files requiring full read-modify-write loops on every message append and slow disk sweeps during expiration pruning.
+- **The Gotcha**:
+  1. **Circular Type Dependencies in Mypy**: Defining persisted dataclasses (like `ThreadState`) in the service layer (`core/threads.py`) creates cyclic type imports when `core/database.py` and `core/threads.py` cross-import, causing Mypy to fall back to `Any` with `no-any-return` errors. Moving `ThreadState` to `models/threads.py` strictly stratifies data schemas below both `core/database.py` and `core/threads.py`.
+  2. **SQLite Autocommit & WAL Mode**: Python 3.12+ (PEP 682) supports `autocommit=True` in `sqlite3.connect()`, which when combined with `PRAGMA journal_mode = WAL;` and `PRAGMA busy_timeout = 5000;` prevents write lock contention across FastAPI background threads and asynchronous tasks.
+  3. **Zero-Gap Hourly Time-Series**: Querying 7-day hourly activity (168 slots) requires building a contiguous sequence from `(now // 3600 - 167) * 3600` to `(now // 3600) * 3600` and zero-filling empty hours so frontend SVG charts maintain consistent geometry.
+- **Code / Solution**:
+```python
+# 1. Atomic hourly metric upsert
+conn.execute(
+    """
+    INSERT INTO hourly_metrics (hour_timestamp, total_requests, successful_requests, failed_requests, prompt_tokens, completion_tokens)
+    VALUES (?, 1, ?, ?, ?, ?)
+    ON CONFLICT(hour_timestamp) DO UPDATE SET
+        total_requests = total_requests + 1,
+        successful_requests = successful_requests + excluded.successful_requests,
+        failed_requests = failed_requests + excluded.failed_requests,
+        prompt_tokens = prompt_tokens + excluded.prompt_tokens,
+        completion_tokens = completion_tokens + excluded.completion_tokens;
+    """,
+    (hour_ts, succ_val, fail_val, prompt_tokens, completion_tokens),
+)
+
+# 2. Seamless startup migration from legacy JSON thread files
+for json_file in storage_dir.glob("thread_*.json"):
+    state = ThreadState(**json.loads(json_file.read_text(encoding="utf-8")))
+    DatabaseManager.save_thread(state)
+    json_file.unlink(missing_ok=True)
+```
+
+
 
 
 

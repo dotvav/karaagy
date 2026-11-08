@@ -30,6 +30,7 @@ class KaraagySettings(BaseSettings):
     threads_dir: Path = Path.home() / ".gemini" / "antigravity-cli" / "karaagy_threads"
     thread_ttl_seconds: float = 604800.0  # 7 days TTL for inactive threads
     enable_native_image_generation: bool = True
+    database_path: Path | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="KARAAGY_",
@@ -56,6 +57,12 @@ class KaraagySettings(BaseSettings):
             if candidate.exists() and candidate.is_file():
                 return str(candidate)
         return "agy"
+
+    def resolve_database_path(self) -> Path:
+        """Resolve path to the Karaagy SQLite database file."""
+        if self.database_path:
+            return self.database_path
+        return self.antigravity_home / "karaagy.db"
 
 
 settings = KaraagySettings()

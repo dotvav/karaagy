@@ -11,9 +11,8 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 from karaagy.config import settings
+from karaagy.core.database import DatabaseManager
 from karaagy.core.process import (
     _execute_agy_json_internal,
     _execute_agy_stream_internal,
@@ -34,20 +33,10 @@ from karaagy.models.threads import (
     ThreadMessage,
     ThreadMessageList,
     ThreadObject,
+    ThreadState,
 )
 
 logger = logging.getLogger(__name__)
-
-
-class ThreadState(BaseModel):
-    """Internal persisted representation of an OpenAI Thread."""
-
-    id: str
-    created_at: int = Field(default_factory=lambda: int(time.time()))
-    last_active_at: int = Field(default_factory=lambda: int(time.time()))
-    conversation_id: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    messages: list[ThreadMessage] = Field(default_factory=list)
 
 
 class ThreadManager:
@@ -60,40 +49,38 @@ class ThreadManager:
         return storage_dir
 
     @classmethod
-    def _get_thread_file(cls, thread_id: str) -> Path:
+    def _validate_thread_id(cls, thread_id: str) -> None:
         clean_id = Path(thread_id).name
         if clean_id != thread_id or not re.match(r"^[a-zA-Z0-9_-]+$", thread_id):
             raise ValueError(f"Invalid thread ID format: '{thread_id}'.")
+
+    @classmethod
+    def _get_thread_file(cls, thread_id: str) -> Path:
+        cls._validate_thread_id(thread_id)
+        clean_id = Path(thread_id).name
         return cls._get_storage_dir() / f"{clean_id}.json"
 
     @classmethod
     def _get_thread_workspace(cls, thread_id: str) -> Path:
+        cls._validate_thread_id(thread_id)
         clean_id = Path(thread_id).name
-        if clean_id != thread_id or not re.match(r"^[a-zA-Z0-9_-]+$", thread_id):
-            raise ValueError(f"Invalid thread ID format: '{thread_id}'.")
         workspace_dir = cls._get_storage_dir() / "workspaces" / clean_id
         workspace_dir.mkdir(parents=True, exist_ok=True)
         return workspace_dir
 
     @classmethod
     def _save_state(cls, state: ThreadState) -> None:
-        file_path = cls._get_thread_file(state.id)
-        file_path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
+        cls._validate_thread_id(state.id)
+        DatabaseManager.save_thread(state)
 
     @classmethod
     def _load_state(cls, thread_id: str) -> ThreadState | None:
         try:
-            file_path = cls._get_thread_file(thread_id)
+            cls._validate_thread_id(thread_id)
         except ValueError:
             return None
-        if not file_path.exists() or not file_path.is_file():
-            return None
-        try:
-            data = json.loads(file_path.read_text(encoding="utf-8"))
-            return ThreadState(**data)
-        except Exception as e:
-            logger.warning("Failed to parse thread file for %s: %s", thread_id, e)
-            return None
+
+        return DatabaseManager.load_thread(thread_id)
 
     @classmethod
     def create_thread(
@@ -160,6 +147,11 @@ class ThreadManager:
     @classmethod
     def delete_thread(cls, thread_id: str) -> bool:
         """Delete a thread and purge its underlying AGY storage."""
+        try:
+            cls._validate_thread_id(thread_id)
+        except ValueError:
+            return False
+
         state = cls._load_state(thread_id)
         if not state:
             return False
@@ -171,22 +163,27 @@ class ThreadManager:
             shutil.rmtree(ws, ignore_errors=True)
         except Exception:
             pass
-        file_path = cls._get_thread_file(thread_id)
+
         try:
-            file_path.unlink(missing_ok=True)
-            logger.info(
-                "Deleted thread %s and pruned AGY storage %s", thread_id, state.conversation_id
-            )
-            return True
-        except Exception as e:
-            logger.error("Failed to delete thread file %s: %s", file_path, e)
-            return False
+            legacy_file = cls._get_storage_dir() / f"{Path(thread_id).name}.json"
+            legacy_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        deleted: bool = bool(DatabaseManager.delete_thread(thread_id))
+        logger.info("Deleted thread %s and pruned AGY storage %s", thread_id, state.conversation_id)
+        return deleted
 
     @classmethod
     def add_message(cls, thread_id: str, req: CreateThreadMessageRequest) -> ThreadMessage | None:
         """Append a message to a thread."""
-        state = cls._load_state(thread_id)
-        if not state:
+        try:
+            cls._validate_thread_id(thread_id)
+        except ValueError:
+            return None
+
+        thread = cls.get_thread(thread_id)
+        if not thread:
             return None
 
         msg_id = f"msg_{uuid.uuid4().hex[:20]}"
@@ -205,9 +202,7 @@ class ThreadManager:
             content=content_list,
             metadata=req.metadata or {},
         )
-        state.messages.append(thread_msg)
-        state.last_active_at = int(time.time())
-        cls._save_state(state)
+        DatabaseManager.add_thread_message(thread_id, thread_msg)
         return thread_msg
 
     @classmethod
@@ -218,14 +213,17 @@ class ThreadManager:
         order: str = "desc",
     ) -> ThreadMessageList | None:
         """List messages in a thread."""
-        state = cls._load_state(thread_id)
-        if not state:
+        try:
+            cls._validate_thread_id(thread_id)
+        except ValueError:
             return None
 
-        msgs = list(state.messages)
-        if order.lower() == "desc":
-            msgs = msgs[::-1]
+        thread = cls.get_thread(thread_id)
+        if not thread:
+            return None
 
+        msgs = DatabaseManager.list_thread_messages(thread_id, limit=limit + 1, order=order)
+        has_more = len(msgs) > limit
         paginated = msgs[:limit]
         first_id = paginated[0].id if paginated else None
         last_id = paginated[-1].id if paginated else None
@@ -234,7 +232,7 @@ class ThreadManager:
             data=paginated,
             first_id=first_id,
             last_id=last_id,
-            has_more=len(msgs) > limit,
+            has_more=has_more,
         )
 
     @classmethod
@@ -655,42 +653,46 @@ class ThreadManager:
 
     @classmethod
     def prune_expired_threads(cls) -> int:
-        """Prune threads inactive for longer than thread_ttl_seconds."""
-        now = int(time.time())
-        ttl = settings.thread_ttl_seconds
+        """Prune threads inactive for longer than thread_ttl_seconds and migrate legacy files."""
         storage_dir = cls._get_storage_dir()
-        if not storage_dir.exists():
-            return 0
+        from karaagy.core.database import DatabaseManager
 
+        # 1. Migrate legacy JSON thread files into SQLite if any exist
+        if storage_dir.exists():
+            DatabaseManager.migrate_legacy_json_threads(storage_dir)
+
+        # 2. Identify expired threads from SQLite
+        ttl = settings.thread_ttl_seconds
+        expired = DatabaseManager.get_expired_threads(ttl)
         pruned_count = 0
-        for json_file in storage_dir.glob("thread_*.json"):
-            try:
-                data = json.loads(json_file.read_text(encoding="utf-8"))
-                last_active = data.get("last_active_at", data.get("created_at", 0))
-                if now - last_active > ttl:
-                    thread_id = data.get("id") or json_file.stem
-                    convo_id = data.get("conversation_id")
-                    if convo_id:
-                        prune_conversation_storage(convo_id)
-                    ws_dir = storage_dir / "workspaces" / Path(thread_id).name
-                    shutil.rmtree(ws_dir, ignore_errors=True)
-                    json_file.unlink(missing_ok=True)
-                    pruned_count += 1
-                    logger.info("Pruned expired thread %s (inactive for > %ds)", thread_id, ttl)
-            except Exception as e:
-                logger.warning("Error inspecting thread file %s for pruning: %s", json_file, e)
+        for thread_id, convo_id in expired:
+            if convo_id:
+                prune_conversation_storage(convo_id)
+            ws_dir = storage_dir / "workspaces" / Path(thread_id).name
+            shutil.rmtree(ws_dir, ignore_errors=True)
+            pruned_count += 1
+            logger.info("Pruned expired thread %s (inactive for > %ds)", thread_id, ttl)
+
+        if expired:
+            DatabaseManager.delete_threads_batch([t[0] for t in expired])
 
         return pruned_count
 
 
 async def periodic_thread_cleanup_loop(interval_seconds: float = 3600.0) -> None:
-    """Periodic background task to prune expired threads."""
+    """Periodic background task to prune expired threads and prune old metrics."""
+    from karaagy.core.database import DatabaseManager
+
     while True:
         try:
             await asyncio.sleep(interval_seconds)
             pruned = ThreadManager.prune_expired_threads()
             if pruned > 0:
                 logger.info("Periodic thread cleanup: removed %d expired threads", pruned)
+            # Prune metrics older than 30 days
+            pruned_metrics = DatabaseManager.prune_metrics(retention_days=30)
+            if pruned_metrics > 0:
+                logger.info("Periodic metrics cleanup: removed %d old hourly rows", pruned_metrics)
         except asyncio.CancelledError:
             break
         except Exception as e:

@@ -26,21 +26,6 @@ class ThreadDeletedResponse(BaseModel):
     deleted: bool = True
 
 
-class ThreadMessageContentText(BaseModel):
-    """Text content block for a thread message."""
-
-    type: Literal["text"] = "text"
-    text: dict[str, Any]  # e.g. {"value": "...", "annotations": []}
-
-
-class ThreadMessageContentImage(BaseModel):
-    """Image content block for a thread message."""
-
-    type: Literal["image_url", "image_file"] = "image_url"
-    image_url: dict[str, Any] | None = None
-    image_file: dict[str, Any] | None = None
-
-
 class ThreadMessage(BaseModel):
     """OpenAI Thread Message schema."""
 
@@ -51,6 +36,17 @@ class ThreadMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: list[dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ThreadState(BaseModel):
+    """Internal persisted representation of an OpenAI Thread."""
+
+    id: str
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    last_active_at: int = Field(default_factory=lambda: int(time.time()))
+    conversation_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    messages: list[ThreadMessage] = Field(default_factory=list)
 
 
 class ThreadMessageList(BaseModel):

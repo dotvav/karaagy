@@ -11,6 +11,7 @@ def test_root_endpoint_json(client: TestClient) -> None:
     assert data["service"] == "Karaagy"
     assert data["status"] == "online"
     assert "metrics" in data
+    assert "activity_7d" in data
     assert "models" in data
     assert "karaagy" in data
     assert "antigravity" in data
@@ -25,6 +26,9 @@ def test_root_endpoint_html(client: TestClient) -> None:
     assert "Karaagy" in response.text
     assert "Antigravity Quota" in response.text
     assert "Discovered Models" in response.text
+    assert "7-Day Hourly Activity" in response.text
+    assert "activity-chart" in response.text
+    assert "hourly-data" in response.text
 
 
 def test_system_status_endpoint(client: TestClient) -> None:
@@ -34,7 +38,25 @@ def test_system_status_endpoint(client: TestClient) -> None:
     data = response.json()
     assert data["service"] == "Karaagy"
     assert "metrics" in data
+    assert "activity_7d" in data
     assert "uptime_seconds" in data["metrics"]
+
+
+def test_hourly_metrics_api_endpoint(client: TestClient) -> None:
+    """Test /v1/system/metrics/hourly endpoint returns valid time series and summary."""
+    response = client.get("/v1/system/metrics/hourly?days=7")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["days"] == 7
+    assert "summary" in data
+    assert "series" in data
+    assert len(data["series"]) == 168
+    assert "total_requests" in data["summary"]
+    assert "peak_hourly_requests" in data["summary"]
+
+    # Test invalid parameter (e.g. days > 30)
+    res_invalid = client.get("/v1/system/metrics/hourly?days=35")
+    assert res_invalid.status_code == 422
 
 
 def test_refresh_usage_endpoint(client: TestClient) -> None:
