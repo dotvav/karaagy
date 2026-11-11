@@ -678,8 +678,8 @@ def render_status_html(
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <a class="btn" href="{clean_base}/v1/system/metrics/hourly?days=7" target="_blank" style="font-size: 0.75rem;">JSON Series</a>
                     <div class="chart-controls">
-                        <button class="btn-chart active" id="btn-metric-requests" onclick="switchMetric('requests')">Requêtes / h</button>
-                        <button class="btn-chart" id="btn-metric-tokens" onclick="switchMetric('tokens')">Tokens / h</button>
+                        <button class="btn-chart active" id="btn-metric-requests" onclick="switchMetric('requests')">Requests / hr</button>
+                        <button class="btn-chart" id="btn-metric-tokens" onclick="switchMetric('tokens')">Tokens / hr</button>
                     </div>
                 </div>
             </div>
@@ -711,9 +711,9 @@ def render_status_html(
                 <svg id="activity-chart" class="activity-svg" viewBox="0 0 1000 220" preserveAspectRatio="none"></svg>
             </div>
             <div class="chart-legend">
-                <span class="legend-item" id="legend-primary"><span class="legend-color" style="background-color: #3fb950;"></span> Requêtes réussies (OK)</span>
-                <span class="legend-item" id="legend-secondary"><span class="legend-color" style="background-color: #f85149;"></span> Erreurs (Failed)</span>
-                <span style="margin-left: auto; font-size: 0.75rem; color: var(--text-muted);">168 heures glissantes (7 derniers jours UTC) · Survoler une barre pour le détail</span>
+                <span class="legend-item" id="legend-primary"><span class="legend-color" style="background-color: #3fb950;"></span> Successful Requests (OK)</span>
+                <span class="legend-item" id="legend-secondary"><span class="legend-color" style="background-color: #f85149;"></span> Errors (Failed)</span>
+                <span style="margin-left: auto; font-size: 0.75rem; color: var(--text-muted);">Rolling 168 hours (last 7 days UTC) · Hover over bars for details</span>
             </div>
         </section>
 
@@ -844,11 +844,11 @@ def render_status_html(
             const legSecondary = document.getElementById('legend-secondary');
             if (legPrimary && legSecondary) {{
                 if (metric === 'requests') {{
-                    legPrimary.innerHTML = '<span class="legend-color" style="background-color: #3fb950;"></span> Requêtes réussies (OK)';
-                    legSecondary.innerHTML = '<span class="legend-color" style="background-color: #f85149;"></span> Erreurs (Failed)';
+                    legPrimary.innerHTML = '<span class="legend-color" style="background-color: #3fb950;"></span> Successful Requests (OK)';
+                    legSecondary.innerHTML = '<span class="legend-color" style="background-color: #f85149;"></span> Errors (Failed)';
                 }} else {{
-                    legPrimary.innerHTML = '<span class="legend-color" style="background-color: #58a6ff;"></span> Prompt Tokens (Entrée)';
-                    legSecondary.innerHTML = '<span class="legend-color" style="background-color: #bc8cff;"></span> Completion Tokens (Sortie)';
+                    legPrimary.innerHTML = '<span class="legend-color" style="background-color: #58a6ff;"></span> Prompt Tokens (Input)';
+                    legSecondary.innerHTML = '<span class="legend-color" style="background-color: #bc8cff;"></span> Completion Tokens (Output)';
                 }}
             }}
             renderActivityChart();
@@ -969,8 +969,8 @@ def render_status_html(
 
                     const totTokens = (d.prompt_tokens || 0) + (d.completion_tokens || 0);
                     tooltip.innerHTML = '<div class="chart-tooltip-date">📅 ' + d.label + ' UTC</div>' +
-                        '<div class="chart-tooltip-row"><span style="color: #3fb950;">● Requêtes :</span><strong>' + d.total_requests + ' (' + d.successful_requests + ' ok, ' + d.failed_requests + ' err)</strong></div>' +
-                        '<div class="chart-tooltip-row"><span style="color: #58a6ff;">● Tokens :</span><strong>' + totTokens.toLocaleString() + ' (' + d.prompt_tokens.toLocaleString() + ' in · ' + d.completion_tokens.toLocaleString() + ' out)</strong></div>';
+                        '<div class="chart-tooltip-row"><span style="color: #3fb950;">● Requests:</span><strong>' + d.total_requests + ' (' + d.successful_requests + ' ok, ' + d.failed_requests + ' err)</strong></div>' +
+                        '<div class="chart-tooltip-row"><span style="color: #58a6ff;">● Tokens:</span><strong>' + totTokens.toLocaleString() + ' (' + d.prompt_tokens.toLocaleString() + ' in · ' + d.completion_tokens.toLocaleString() + ' out)</strong></div>';
                     tooltip.style.display = 'block';
                     positionTooltip(e, wrapper, tooltip);
                 }});
