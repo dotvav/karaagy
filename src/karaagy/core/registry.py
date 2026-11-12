@@ -50,10 +50,64 @@ class ModelRegistry:
 
     _cached_models: list[str] = []
     _last_fetched_at: float = 0.0
+    _fetch_lock: asyncio.Lock | None = None
+    _background_task: asyncio.Task[list[str]] | None = None
 
     @classmethod
-    async def get_available_models(cls, force_refresh: bool = False) -> list[str]:
-        """Fetch available models via `agy models` CLI or return cached list."""
+    def _get_fetch_lock(cls) -> asyncio.Lock:
+        if cls._fetch_lock is None:
+            cls._fetch_lock = asyncio.Lock()
+        return cls._fetch_lock
+
+    @classmethod
+    async def _fetch_models_process(cls) -> list[str]:
+        """Execute `agy models` CLI and update cache."""
+        lock = cls._get_fetch_lock()
+        async with lock:
+            now = time.time()
+            if cls._cached_models and (now - cls._last_fetched_at < settings.cache_ttl_seconds):
+                return cls._cached_models
+
+            agy_bin = settings.resolve_agy_bin()
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    agy_bin,
+                    "models",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await proc.communicate()
+                if proc.returncode == 0 and stdout:
+                    lines = stdout.decode("utf-8", errors="replace").splitlines()
+                    discovered: list[str] = []
+                    for line in lines:
+                        stripped = line.strip()
+                        if not stripped or stripped.startswith("⠋") or stripped.startswith("⠙"):
+                            continue
+                        parts = stripped.split()
+                        if parts:
+                            model_name = parts[0]
+                            if model_name not in discovered:
+                                discovered.append(model_name)
+                    if discovered:
+                        cls._cached_models = discovered
+                        cls._last_fetched_at = now
+                        logger.info("Discovered %d models from `agy models`", len(discovered))
+                        return cls._cached_models
+            except Exception as e:
+                logger.warning("Failed to discover models via `agy models`: %s", e)
+
+            if not cls._cached_models:
+                cls._cached_models = list(DEFAULT_MODELS)
+                cls._last_fetched_at = now
+
+            return cls._cached_models
+
+    @classmethod
+    async def get_available_models(
+        cls, force_refresh: bool = False, background_on_stale: bool = True
+    ) -> list[str]:
+        """Fetch available models via `agy models` CLI with Stale-While-Revalidate caching."""
         now = time.time()
         if (
             not force_refresh
@@ -62,40 +116,15 @@ class ModelRegistry:
         ):
             return cls._cached_models
 
-        agy_bin = settings.resolve_agy_bin()
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                agy_bin,
-                "models",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode == 0 and stdout:
-                lines = stdout.decode("utf-8", errors="replace").splitlines()
-                discovered: list[str] = []
-                for line in lines:
-                    stripped = line.strip()
-                    if not stripped or stripped.startswith("⠋") or stripped.startswith("⠙"):
-                        continue
-                    parts = stripped.split()
-                    if parts:
-                        model_name = parts[0]
-                        if model_name not in discovered:
-                            discovered.append(model_name)
-                if discovered:
-                    cls._cached_models = discovered
-                    cls._last_fetched_at = now
-                    logger.info("Discovered %d models from `agy models`", len(discovered))
-                    return cls._cached_models
-        except Exception as e:
-            logger.warning("Failed to discover models via `agy models`: %s", e)
+        # If stale or empty, return immediately and refresh in background
+        if not force_refresh and background_on_stale:
+            if not cls._cached_models:
+                cls._cached_models = list(DEFAULT_MODELS)
+            if cls._background_task is None or cls._background_task.done():
+                cls._background_task = asyncio.create_task(cls._fetch_models_process())
+            return cls._cached_models
 
-        if not cls._cached_models:
-            cls._cached_models = list(DEFAULT_MODELS)
-            cls._last_fetched_at = now
-
-        return cls._cached_models
+        return await cls._fetch_models_process()
 
     @classmethod
     def resolve_model(cls, requested_model: str | None) -> str:

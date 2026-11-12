@@ -675,6 +675,9 @@ class ThreadManager:
 
         if expired:
             DatabaseManager.delete_threads_batch([t[0] for t in expired])
+            from karaagy.core.diagnostics import DiagnosticsManager
+
+            DiagnosticsManager.invalidate_thread_counts_cache()
 
         return pruned_count
 

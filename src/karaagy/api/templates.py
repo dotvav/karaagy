@@ -64,10 +64,18 @@ def render_status_html(
     peak_req = hourly_summary.get("peak_hourly_requests", 0)
     peak_tok = hourly_summary.get("peak_hourly_tokens", 0)
     hourly_json_str = json.dumps(hourly_data)
+    ttl_days = int(round(float(settings_dict.get("thread_ttl_seconds", 604800.0)) / 86400))
 
     # Build quota cards HTML
     quota_html_parts = []
-    if quota_data.get("available") and quota_data.get("groups"):
+    if quota_data.get("loading"):
+        quota_content = """
+        <div class="notice-box info-box" id="quota-loading-notice">
+            <span style="display: inline-block; margin-right: 8px;">⏳</span>
+            <span>Fetching live quota from Antigravity backend...</span>
+        </div>
+        """
+    elif quota_data.get("available") and quota_data.get("groups"):
         for grp in quota_data["groups"]:
             g_name = html.escape(grp.get("name", "Model Group"))
             g_desc = html.escape(grp.get("description", ""))
@@ -654,6 +662,11 @@ def render_status_html(
                     <div class="stat-sub">Parallel session limit</div>
                 </div>
                 <div class="stat-box">
+                    <div class="stat-label">Active Threads</div>
+                    <div class="stat-value">{metrics.get("active_threads", 0)}</div>
+                    <div class="stat-sub">{metrics.get("total_threads", 0)} total in DB · {ttl_days}d active window</div>
+                </div>
+                <div class="stat-box">
                     <div class="stat-label">Requests Processed</div>
                     <div class="stat-value">{metrics.get("total_requests", 0)}</div>
                     <div class="stat-sub">{metrics.get("successful_requests", 0)} OK · {metrics.get("failed_requests", 0)} Failed</div>
@@ -808,25 +821,110 @@ def render_status_html(
             }});
         }}
 
+        function escapeHtml(str) {{
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }}
+
+        function renderQuotaCards(quota) {{
+            const container = document.getElementById('quota-container');
+            const ageSpan = document.getElementById('quota-age');
+            if (!container) return;
+            if (ageSpan && quota.cache_age_formatted) {{
+                ageSpan.innerText = quota.cache_age_formatted;
+            }}
+            if (!quota.available || !quota.groups || quota.groups.length === 0) {{
+                const errMsg = escapeHtml(quota.error || 'Quota information currently unavailable.');
+                container.innerHTML = `<div class="notice-box error-box"><span>⚠️ ${{errMsg}}</span></div>`;
+                return;
+            }}
+            let htmlParts = [];
+            for (const grp of quota.groups) {{
+                const gName = escapeHtml(grp.name || 'Model Group');
+                const gDesc = escapeHtml(grp.description || '');
+                let bucketsHtml = [];
+                for (const b of (grp.buckets || [])) {{
+                    const bName = escapeHtml(b.name || 'Limit');
+                    const pct = Number(b.remaining_percent) || 0;
+                    const resetTime = escapeHtml(b.reset_time || '');
+                    const bDesc = escapeHtml(b.description || 'Active quota window');
+                    let barColor = '#10b981';
+                    if (pct < 20) barColor = '#ef4444';
+                    else if (pct < 50) barColor = '#f59e0b';
+                    bucketsHtml.push(`
+                    <div class="bucket-card">
+                        <div class="bucket-header">
+                            <span class="bucket-name">${{bName}}</span>
+                            <span class="bucket-pct" style="color: ${{barColor}};">${{pct}}% remaining</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="width: ${{pct}}%; background-color: ${{barColor}};"></div>
+                        </div>
+                        <div class="bucket-meta">
+                            <span>${{bDesc}}</span>
+                            ${{resetTime ? `<span class="reset-time">Resets: ${{resetTime}}</span>` : ''}}
+                        </div>
+                    </div>
+                    `);
+                }}
+                htmlParts.push(`
+                <div class="quota-group">
+                    <div class="group-title">${{gName}}</div>
+                    <div class="group-desc">${{gDesc}}</div>
+                    <div class="buckets-grid">${{bucketsHtml.join('')}}</div>
+                </div>
+                `);
+            }}
+            container.innerHTML = htmlParts.join('');
+        }}
+
         async function refreshQuota() {{
             const btn = document.getElementById('refresh-quota-btn');
-            const ageSpan = document.getElementById('quota-age');
             btn.classList.add('btn-disabled');
             btn.innerText = 'Refreshing...';
             try {{
                 const res = await fetch('{clean_base}/v1/system/refresh-usage', {{ method: 'POST' }});
                 if (res.ok) {{
-                    window.location.reload();
+                    const data = await res.json();
+                    if (data.quota) {{
+                        renderQuotaCards(data.quota);
+                    }}
+                    btn.innerText = 'Updated!';
+                    setTimeout(() => {{ btn.innerText = '🔄 Refresh Quota'; }}, 2000);
                 }} else {{
                     btn.innerText = 'Error';
-                    setTimeout(() => btn.innerText = '🔄 Refresh Quota', 2000);
+                    setTimeout(() => {{ btn.innerText = '🔄 Refresh Quota'; }}, 2000);
                 }}
             }} catch (e) {{
                 btn.innerText = 'Failed';
-                setTimeout(() => btn.innerText = '🔄 Refresh Quota', 2000);
+                setTimeout(() => {{ btn.innerText = '🔄 Refresh Quota'; }}, 2000);
             }} finally {{
                 btn.classList.remove('btn-disabled');
             }}
+        }}
+
+        async function checkQuotaHydration() {{
+            const loadingNotice = document.getElementById('quota-loading-notice');
+            if (!loadingNotice) return;
+            try {{
+                const res = await fetch('{clean_base}/v1/system/status');
+                if (res.ok) {{
+                    const data = await res.json();
+                    if (data.quota && (data.quota.available || data.quota.error)) {{
+                        renderQuotaCards(data.quota);
+                        return;
+                    }}
+                }}
+            }} catch (e) {{}}
+            setTimeout(checkQuotaHydration, 1500);
+        }}
+        if (document.getElementById('quota-loading-notice')) {{
+            setTimeout(checkQuotaHydration, 1000);
         }}
 
         const hourlyDataEl = document.getElementById('hourly-data');

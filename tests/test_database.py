@@ -239,3 +239,57 @@ def test_thread_manager_prune_expired(tmp_path: Path) -> None:
 
     assert ThreadManager.get_thread(active.id) is not None
     assert ThreadManager.get_thread(expired.id) is None
+
+
+def test_database_and_diagnostics_thread_counts(tmp_path: Path) -> None:
+    """Test get_thread_counts and DiagnosticsManager thread counts caching."""
+    from karaagy.core.diagnostics import DiagnosticsManager
+
+    settings.database_path = tmp_path / "counts_test.db"
+    settings.thread_ttl_seconds = 3600.0  # 1 hour
+    DatabaseManager.init_db()
+    DiagnosticsManager.invalidate_thread_counts_cache()
+
+    # Empty table
+    counts = DatabaseManager.get_thread_counts(settings.thread_ttl_seconds)
+    assert counts == {"active_threads": 0, "total_threads": 0}
+
+    # Add 1 active and 1 expired thread
+    now = time.time()
+    active = ThreadManager.create_thread(
+        messages=[CreateThreadMessageRequest(role="user", content="Active")]
+    )
+    assert active.id is not None
+    expired = ThreadManager.create_thread(
+        messages=[CreateThreadMessageRequest(role="user", content="Expired")]
+    )
+    with get_db_connection() as conn:
+        with conn:
+            conn.execute(
+                "UPDATE threads SET last_active_at = ? WHERE id = ?;",
+                (int(now - 7200), expired.id),
+            )
+
+    counts = DatabaseManager.get_thread_counts(settings.thread_ttl_seconds)
+    assert counts == {"active_threads": 1, "total_threads": 2}
+
+    # Test DiagnosticsManager caching
+    cached1 = DiagnosticsManager.get_thread_counts()
+    assert cached1 == {"active_threads": 1, "total_threads": 2}
+
+    # Manually add another thread to DB directly
+    with get_db_connection() as conn:
+        with conn:
+            conn.execute(
+                "INSERT INTO threads (id, created_at, last_active_at, conversation_id, metadata) VALUES (?, ?, ?, ?, ?);",
+                ("thread_direct", int(now), int(now), "conv_1", "{}"),
+            )
+
+    # Cached call should still return old value due to TTL
+    cached2 = DiagnosticsManager.get_thread_counts()
+    assert cached2 == {"active_threads": 1, "total_threads": 2}
+
+    # Invalidate cache and call again
+    DiagnosticsManager.invalidate_thread_counts_cache()
+    fresh = DiagnosticsManager.get_thread_counts()
+    assert fresh == {"active_threads": 2, "total_threads": 3}

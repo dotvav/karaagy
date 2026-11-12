@@ -427,6 +427,25 @@ class DatabaseManager:
             return messages
 
     @classmethod
+    def get_thread_counts(cls, ttl_seconds: float) -> dict[str, int]:
+        """Return counts of total threads and active/living threads within TTL."""
+        cutoff = int(time.time() - ttl_seconds)
+        with get_db_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT
+                    COUNT(*),
+                    COALESCE(SUM(CASE WHEN last_active_at >= ? THEN 1 ELSE 0 END), 0)
+                FROM threads;
+                """,
+                (cutoff,),
+            )
+            row = cursor.fetchone()
+            total = int(row[0]) if row and row[0] is not None else 0
+            active = int(row[1]) if row and row[1] is not None else 0
+            return {"active_threads": active, "total_threads": total}
+
+    @classmethod
     def get_expired_threads(cls, ttl_seconds: float) -> list[tuple[str, str | None]]:
         """Return list of (thread_id, conversation_id) for threads older than TTL."""
         cutoff = int(time.time() - ttl_seconds)

@@ -323,6 +323,62 @@ for json_file in storage_dir.glob("thread_*.json"):
     json_file.unlink(missing_ok=True)
 ```
 
+---
+
+## 🛠️ 22. Antigravity OAuth Token Portability & Zero-I/O Gateway Metric Caching
+- **Last Updated**: 2026-11-12T10:55:00Z
+- **The Issue**: 
+  1. Headless or remote containerized instances of Karaagy need initial activation without interactive TUI prompts.
+  2. Displaying real-time thread activity on the dashboard could trigger redundant SQLite disk reads on high-frequency status polling.
+- **The Gotcha**:
+  1. **Token Portability**: `agy` stores its OAuth state in `~/.gemini/antigravity-cli/antigravity-oauth-token` without hardware fingerprinting, IP binding, or local encryption. Tokens generated on a developer workstation can be mounted or injected into remote headless environments; `agy` uses the `refresh_token` to automatically negotiate new `access_token`s without user interaction.
+  2. **In-Memory TTL Metric Caching**: Exposing persistent entity counts (like active threads within the TTL window) on `GET /` without incurring SQLite disk reads on every dashboard refresh is solved with an in-memory TTL cache (60s) in `DiagnosticsManager`, invalidated proactively during background pruning cycles (`ThreadManager.prune_expired_threads()`).
+  3. **Conditional SQLite Aggregation on Empty Tables**: In SQLite, `SUM()` on an empty table yields `NULL` rather than `0`. Wrapping conditional sums with `COALESCE(SUM(CASE WHEN last_active_at >= ? THEN 1 ELSE 0 END), 0)` guarantees strict `int` return types without `None` branches.
+- **Code / Solution**:
+```python
+# 1. Guaranteed non-null integer counts across empty or populated tables
+cursor.execute(
+    """
+    SELECT
+        COUNT(*),
+        COALESCE(SUM(CASE WHEN last_active_at >= ? THEN 1 ELSE 0 END), 0)
+    FROM threads;
+    """,
+    (cutoff,),
+)
+
+# 2. In-memory TTL cache in DiagnosticsManager
+if (
+    cls._cached_thread_counts is not None
+    and (time.time() - cls._thread_counts_last_fetched_at) < cls._thread_counts_cache_ttl
+):
+    return cls._cached_thread_counts
+```
+
+---
+
+## 🛠️ 23. Stale-While-Revalidate & Client-Side Hydration for Subprocess Latency Elimination
+- **Last Updated**: 2026-11-12T11:05:00Z
+- **The Issue**: Loading `GET /` previously blocked on sequential execution of `agy -p /usage` (~2.1s) and `agy models` (~1.3s) whenever the cache expired or was cold, causing 3-4 seconds of browser latency before rendering the initial HTML.
+- **The Gotcha**:
+  1. **Stale-While-Revalidate (SWR)**: `DiagnosticsManager.get_account_quota()` and `ModelRegistry.get_available_models()` should never block HTTP handlers. Stale data (or cold-start placeholders) are returned immediately (< 5ms), and cache refreshes are scheduled via `asyncio.create_task()`.
+  2. **Double-Checked Locking in Subprocess Tasks**: To prevent dog-piling when multiple concurrent requests trigger background refreshes, the inner worker must re-verify `(now - last_fetched_at) < ttl` immediately after acquiring the `asyncio.Lock()`.
+  3. **In-Place Client-Side Hydration**: Instead of forcing a full page refresh (`window.location.reload()`), client-side JavaScript (`renderQuotaCards()`) hydrates DOM nodes from `/v1/system/status` and `/v1/system/refresh-usage` payloads, providing instant visual feedback.
+- **Code / Solution**:
+```python
+# Server-side SWR non-blocking return with background task
+if cls._cached_usage is not None and background_on_stale:
+    if cls._usage_fetch_task is None or cls._usage_fetch_task.done():
+        cls._usage_fetch_task = asyncio.create_task(cls._fetch_fresh_quota())
+    age = int(now - cls._usage_last_fetched_at)
+    res = dict(cls._cached_usage)
+    res["cache_age_seconds"] = age
+    res["cache_age_formatted"] = cls.format_duration(age)
+    return res
+```
+
+
+
 
 
 

@@ -66,6 +66,11 @@ class DiagnosticsManager:
     _cached_usage: dict[str, Any] | None = None
     _usage_last_fetched_at: float = 0.0
     _usage_lock: asyncio.Lock | None = None
+    _usage_fetch_task: asyncio.Task[dict[str, Any]] | None = None
+
+    _cached_thread_counts: dict[str, int] | None = None
+    _thread_counts_last_fetched_at: float = 0.0
+    _thread_counts_cache_ttl: float = 60.0
 
     @classmethod
     def _get_usage_lock(cls) -> asyncio.Lock:
@@ -145,6 +150,33 @@ class DiagnosticsManager:
         return f"{secs}s"
 
     @classmethod
+    def invalidate_thread_counts_cache(cls) -> None:
+        """Clear cached thread counts to force a fresh SQLite query on next read."""
+        cls._cached_thread_counts = None
+        cls._thread_counts_last_fetched_at = 0.0
+
+    @classmethod
+    def get_thread_counts(cls) -> dict[str, int]:
+        """Retrieve thread counts with a 60-second in-memory cache."""
+        now = time.time()
+        if (
+            cls._cached_thread_counts is not None
+            and (now - cls._thread_counts_last_fetched_at) < cls._thread_counts_cache_ttl
+        ):
+            return cls._cached_thread_counts
+
+        counts: dict[str, int]
+        try:
+            counts = DatabaseManager.get_thread_counts(settings.thread_ttl_seconds)
+        except Exception:
+            logger.exception("Failed to query thread counts from SQLite")
+            counts = {"active_threads": 0, "total_threads": 0}
+
+        cls._cached_thread_counts = counts
+        cls._thread_counts_last_fetched_at = now
+        return counts
+
+    @classmethod
     def get_gateway_metrics(cls) -> dict[str, Any]:
         """Return cumulative gateway throughput metrics."""
         uptime = cls.get_uptime_seconds()
@@ -158,6 +190,8 @@ class DiagnosticsManager:
             available = getattr(sem, "_value", max_concurrency)
             active_concurrency = max(0, max_concurrency - available)
 
+        thread_counts = cls.get_thread_counts()
+
         return {
             "uptime_seconds": round(uptime, 2),
             "uptime_formatted": cls.format_duration(uptime),
@@ -169,6 +203,8 @@ class DiagnosticsManager:
             "total_tokens": cls._total_prompt_tokens + cls._total_completion_tokens,
             "active_concurrency": active_concurrency,
             "max_concurrency": max_concurrency,
+            "active_threads": thread_counts["active_threads"],
+            "total_threads": thread_counts["total_threads"],
         }
 
     @classmethod
@@ -242,33 +278,16 @@ class DiagnosticsManager:
         return cls._cached_agy_version
 
     @classmethod
-    async def get_account_quota(cls, force_refresh: bool = False) -> dict[str, Any]:
-        """Fetch Antigravity `/usage` quota buckets with TTL caching."""
-        now = time.time()
-        ttl = settings.usage_cache_ttl_seconds
-
-        if (
-            not force_refresh
-            and cls._cached_usage is not None
-            and (now - cls._usage_last_fetched_at) < ttl
-        ):
-            age = int(now - cls._usage_last_fetched_at)
-            cls._cached_usage["cache_age_seconds"] = age
-            cls._cached_usage["cache_age_formatted"] = cls.format_duration(age)
-            return cls._cached_usage
-
+    async def _fetch_fresh_quota(cls) -> dict[str, Any]:
+        """Execute `agy -p /usage` and parse quota buckets."""
         lock = cls._get_usage_lock()
         async with lock:
-            # Re-check after acquiring lock
             now = time.time()
+            # Double-check cache in case another task just refreshed it
             if (
-                not force_refresh
-                and cls._cached_usage is not None
-                and (now - cls._usage_last_fetched_at) < ttl
+                cls._cached_usage is not None
+                and (now - cls._usage_last_fetched_at) < settings.usage_cache_ttl_seconds
             ):
-                age = int(now - cls._usage_last_fetched_at)
-                cls._cached_usage["cache_age_seconds"] = age
-                cls._cached_usage["cache_age_formatted"] = cls.format_duration(age)
                 return cls._cached_usage
 
             agy_bin = settings.resolve_agy_bin()
@@ -326,6 +345,7 @@ class DiagnosticsManager:
 
                     cls._cached_usage = {
                         "available": True,
+                        "loading": False,
                         "last_fetched_at": datetime.now(UTC).isoformat(),
                         "cache_age_seconds": 0,
                         "cache_age_formatted": "just now",
@@ -338,8 +358,9 @@ class DiagnosticsManager:
 
                 err_text = stderr.decode("utf-8", errors="replace").strip() or raw_stdout
                 logger.warning("Antigravity /usage command failed: %s", err_text)
-                return {
+                res = {
                     "available": False,
+                    "loading": False,
                     "last_fetched_at": datetime.now(UTC).isoformat(),
                     "cache_age_seconds": 0,
                     "cache_age_formatted": "never",
@@ -347,11 +368,16 @@ class DiagnosticsManager:
                     "groups": [],
                     "error": f"CLI exited with code {proc.returncode}: {err_text[:200]}",
                 }
+                if cls._cached_usage is None:
+                    cls._cached_usage = res
+                    cls._usage_last_fetched_at = now
+                return res
 
             except Exception as e:
                 logger.warning("Exception querying Antigravity /usage: %s", e)
-                return {
+                res = {
                     "available": False,
+                    "loading": False,
                     "last_fetched_at": datetime.now(UTC).isoformat(),
                     "cache_age_seconds": 0,
                     "cache_age_formatted": "never",
@@ -359,6 +385,57 @@ class DiagnosticsManager:
                     "groups": [],
                     "error": str(e),
                 }
+                if cls._cached_usage is None:
+                    cls._cached_usage = res
+                    cls._usage_last_fetched_at = now
+                return res
+
+    @classmethod
+    async def get_account_quota(
+        cls, force_refresh: bool = False, background_on_stale: bool = True
+    ) -> dict[str, Any]:
+        """Fetch Antigravity `/usage` quota buckets with Stale-While-Revalidate caching."""
+        now = time.time()
+        ttl = settings.usage_cache_ttl_seconds
+
+        # Explicit force refresh requested (e.g. POST /v1/system/refresh-usage)
+        if force_refresh:
+            return await cls._fetch_fresh_quota()
+
+        # Fresh cache hit
+        if cls._cached_usage is not None and (now - cls._usage_last_fetched_at) < ttl:
+            age = int(now - cls._usage_last_fetched_at)
+            res = dict(cls._cached_usage)
+            res["cache_age_seconds"] = age
+            res["cache_age_formatted"] = cls.format_duration(age)
+            return res
+
+        # Stale cache: return immediately and trigger background refresh
+        if cls._cached_usage is not None and background_on_stale:
+            if cls._usage_fetch_task is None or cls._usage_fetch_task.done():
+                cls._usage_fetch_task = asyncio.create_task(cls._fetch_fresh_quota())
+            age = int(now - cls._usage_last_fetched_at)
+            res = dict(cls._cached_usage)
+            res["cache_age_seconds"] = age
+            res["cache_age_formatted"] = cls.format_duration(age)
+            return res
+
+        # Cold cache on startup: return loading placeholder and trigger background refresh
+        if background_on_stale:
+            if cls._usage_fetch_task is None or cls._usage_fetch_task.done():
+                cls._usage_fetch_task = asyncio.create_task(cls._fetch_fresh_quota())
+            return {
+                "available": False,
+                "loading": True,
+                "last_fetched_at": None,
+                "cache_age_seconds": 0,
+                "cache_age_formatted": "fetching...",
+                "description": "",
+                "groups": [],
+                "error": None,
+            }
+
+        return await cls._fetch_fresh_quota()
 
     @classmethod
     def is_sensitive_key(cls, key: str) -> bool:

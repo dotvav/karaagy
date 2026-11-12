@@ -27,6 +27,7 @@ def test_root_endpoint_html(client: TestClient) -> None:
     assert "Antigravity Quota" in response.text
     assert "Discovered Models" in response.text
     assert "7-Day Hourly Activity" in response.text
+    assert "Active Threads" in response.text
     assert "activity-chart" in response.text
     assert "hourly-data" in response.text
 
@@ -40,6 +41,8 @@ def test_system_status_endpoint(client: TestClient) -> None:
     assert "metrics" in data
     assert "activity_7d" in data
     assert "uptime_seconds" in data["metrics"]
+    assert "active_threads" in data["metrics"]
+    assert "total_threads" in data["metrics"]
 
 
 def test_hourly_metrics_api_endpoint(client: TestClient) -> None:
@@ -132,3 +135,35 @@ def test_html_status_page_contains_logo_and_favicon(client: TestClient) -> None:
     assert "header-logo" in response.text
     assert 'rel="icon"' in response.text
     assert "<svg" in response.text
+    assert "renderQuotaCards" in response.text
+    assert "checkQuotaHydration" in response.text
+
+
+def test_stale_while_revalidate_quota() -> None:
+    """Test DiagnosticsManager Stale-While-Revalidate caching."""
+    import asyncio
+    import time
+
+    from karaagy.core.diagnostics import DiagnosticsManager
+
+    # Simulate stale cache
+    DiagnosticsManager._cached_usage = {
+        "available": True,
+        "loading": False,
+        "last_fetched_at": "2026-01-01T00:00:00Z",
+        "cache_age_seconds": 999999,
+        "cache_age_formatted": "stale",
+        "groups": [{"name": "TestGroup", "buckets": []}],
+        "error": None,
+    }
+    DiagnosticsManager._usage_last_fetched_at = time.time() - 999999
+
+    async def run_check() -> None:
+        # Non-blocking should return stale immediately without raising or waiting
+        res = await DiagnosticsManager.get_account_quota(
+            force_refresh=False, background_on_stale=True
+        )
+        assert res["available"] is True
+        assert res["groups"][0]["name"] == "TestGroup"
+
+    asyncio.run(run_check())
